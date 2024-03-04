@@ -1,0 +1,18 @@
+[package]
+name = "ascot-firmware"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = "0.7.4"
+gethostname = "0.4"
+if-addrs = "0.11"
+mdns-sd = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+thiserror = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3.18"
