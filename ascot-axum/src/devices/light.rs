@@ -9,6 +9,12 @@ use crate::error::{Error, ErrorKind, Result};
 // The default main route for a light.
 const LIGHT_MAIN_ROUTE: &str = "/light";
 
+// Mandatory actions hazards.
+const TURN_LIGHT_ON: Hazard = Hazard::FireHazard;
+
+// Allowed hazards.
+const ALLOWED_HAZARDS: &'static [Hazard] = &[Hazard::FireHazard, Hazard::ElectricEnergyConsumption];
+
 /// A smart home light.
 ///
 /// The default server main route for a light is `light`.
@@ -23,8 +29,10 @@ where
     main_route: &'static str,
     // Light state.
     state: Option<S>,
-    // Device
+    // Device.
     device: Device<S>,
+    // Allowed light hazards.
+    allowed_hazards: &'static [Hazard],
 }
 
 impl<S> Light<S>
@@ -44,7 +52,7 @@ where
     {
         // Raise an error whether turn light_on does not contain a
         // fire hazard.
-        if turn_light_on.miss_hazard(Hazard::FireHazard) {
+        if turn_light_on.miss_hazard(TURN_LIGHT_ON) {
             return Err(Error::new(
                 ErrorKind::Light,
                 "No fire hazard for the `turn_light_on` route",
@@ -60,6 +68,7 @@ where
             main_route: LIGHT_MAIN_ROUTE,
             device,
             state: None,
+            allowed_hazards: ALLOWED_HAZARDS,
         })
     }
 
@@ -70,13 +79,24 @@ where
     }
 
     /// Adds an additional action for a [`Light`].
-    pub fn add_action<H, T>(mut self, light_action: DeviceAction<H, T>) -> Self
+    pub fn add_action<H, T>(mut self, light_action: DeviceAction<H, T>) -> Result<Self>
     where
         H: Handler<T, ()>,
         T: 'static,
     {
+        // Return an error if action hazards are not a subset of allowed hazards.
+        for hazard in light_action.hazards.iter() {
+            if !self.allowed_hazards.contains(hazard) {
+                return Err(Error::new(
+                    ErrorKind::Light,
+                    format!("{hazard} hazard is not allowed for light"),
+                ));
+            }
+        }
+
         self.device = self.device.add_action(light_action);
-        self
+
+        Ok(self)
     }
 
     /// Sets a state for a [`Light`].

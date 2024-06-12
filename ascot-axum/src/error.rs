@@ -13,6 +13,8 @@ pub enum ErrorKind {
     AscotLibrary,
     /// Light error.
     Light,
+    /// Fridge error.
+    Fridge,
 }
 
 impl ErrorKind {
@@ -23,6 +25,7 @@ impl ErrorKind {
             ErrorKind::Serialization => "serialization",
             ErrorKind::AscotLibrary => "Ascot library error",
             ErrorKind::Light => "light error",
+            ErrorKind::Fridge => "fridge error",
         }
     }
 }

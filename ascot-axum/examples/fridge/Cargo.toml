@@ -1,5 +1,5 @@
 [package]
-name = "ascot-axum-firmware"
+name = "fridge"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 async-lock = "3.3.0"
-ascot-axum = { version = "0.1.0", path = "../ascot-axum" }
-ascot-library = { version = "0.1.0", path = "../" }
+ascot-library = { version = "0.1.0", path = "../../../" }
+ascot-axum = { version = "0.1.0", path = "../../" }
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }

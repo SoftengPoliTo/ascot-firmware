@@ -129,11 +129,11 @@ async fn main() -> Result<(), Error> {
         DeviceAction::with_hazard(light_on_config, turn_light_on, Hazard::FireHazard),
         DeviceAction::no_hazards(light_off_config, turn_light_off),
     )?
-    .add_action(DeviceAction::no_hazards(toggle_config, toggle))
+    .add_action(DeviceAction::no_hazards(toggle_config, toggle))?
     .add_action(DeviceAction::no_hazards(
         light_on_post_config,
         turn_light_on_post,
-    ))
+    ))?
     .state(DeviceState::new(DummyLight::default()))
     .build();
 

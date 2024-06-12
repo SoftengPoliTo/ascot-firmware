@@ -22,15 +22,15 @@ impl DummyLight {
         self.brightness = brightness;
         self.save_energy = save_energy;
         println!(
-                "Dummy light turn light on action with brightness={brightness} and save energy={save_energy}"
+                "Run turn light on with brightness={brightness} and save energy={save_energy}"
             );
     }
 
     pub(crate) fn turn_light_off(&self) {
-        println!("Run dummy light turn light off action");
+        println!("Run turn light off");
     }
 
     pub(crate) fn toggle(&self) {
-        println!("Run dummy light toggle action");
+        println!("Run light toggle");
     }
 }
