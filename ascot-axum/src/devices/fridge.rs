@@ -12,13 +12,11 @@ use crate::MAXIMUM_ELEMENTS;
 const FRIDGE_MAIN_ROUTE: &str = "/fridge";
 
 // Mandatory actions hazards.
-const INCREASE_TEMPERATURE: &'static [Hazard] =
-    &[Hazard::ElectricEnergyConsumption, Hazard::SpoiledFood];
+const INCREASE_TEMPERATURE: &[Hazard] = &[Hazard::ElectricEnergyConsumption, Hazard::SpoiledFood];
 const DECREASE_TEMPERATURE: Hazard = Hazard::ElectricEnergyConsumption;
 
 // Allowed hazards.
-const ALLOWED_HAZARDS: &'static [Hazard] =
-    &[Hazard::ElectricEnergyConsumption, Hazard::SpoiledFood];
+const ALLOWED_HAZARDS: &[Hazard] = &[Hazard::ElectricEnergyConsumption, Hazard::SpoiledFood];
 
 // Mandatory fridge actions.
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -47,6 +45,15 @@ where
     mandatory_actions: FnvIndexSet<Actions, MAXIMUM_ELEMENTS>,
     // Allowed fridge hazards.
     allowed_hazards: &'static [Hazard],
+}
+
+impl<S> Default for Fridge<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<S> DeviceBuilder<S> for Fridge<S>

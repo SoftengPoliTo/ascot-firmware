@@ -13,7 +13,7 @@ const LIGHT_MAIN_ROUTE: &str = "/light";
 const TURN_LIGHT_ON: Hazard = Hazard::FireHazard;
 
 // Allowed hazards.
-const ALLOWED_HAZARDS: &'static [Hazard] = &[Hazard::FireHazard, Hazard::ElectricEnergyConsumption];
+const ALLOWED_HAZARDS: &[Hazard] = &[Hazard::FireHazard, Hazard::ElectricEnergyConsumption];
 
 /// A smart home light.
 ///
