@@ -1,5 +1,3 @@
-use core::marker::PhantomData;
-
 use ascot_library::device::{DeviceData, DeviceErrorKind, DeviceKind, DeviceSerializer};
 use ascot_library::hazards::{Hazard, Hazards};
 use ascot_library::route::{RestKind, Route, RouteMode, Routes};
@@ -69,68 +67,50 @@ impl IntoResponse for DeviceError {
 
 /// A device action connects a server route with a device handler and,
 /// optionally, with every possible hazards associated with the handler.
-pub struct DeviceAction<H, T>
-where
-    H: Handler<T, ()>,
-    T: 'static,
-{
+#[derive(Debug)]
+pub struct DeviceAction {
     // Route.
     pub(crate) route: Route,
     // Hazards.
     pub(crate) hazards: Hazards,
-    // Handler.
-    pub(crate) handler: H,
-    // Handler type.
-    handler_type: PhantomData<T>,
+    // Router.
+    pub(crate) router: Router,
 }
 
-impl<H, T> DeviceAction<H, T>
-where
-    H: Handler<T, ()>,
-    T: 'static,
-{
+impl DeviceAction {
     /// Creates a new [`DeviceAction`].
-    pub fn no_hazards(mut route: Route, handler: H) -> Self {
-        route.join_inputs(RouteMode::Linear);
-
-        Self {
-            route,
-            hazards: Hazards::init(),
-            handler,
-            handler_type: PhantomData,
-        }
+    pub fn no_hazards<H, T>(route: Route, handler: H) -> Self
+    where
+        H: Handler<T, ()>,
+        T: 'static,
+    {
+        Self::init(route, Hazards::init(), handler)
     }
 
     /// Creates a new [`DeviceAction`] with a single [`Hazard`].
-    pub fn with_hazard(mut route: Route, handler: H, hazard: Hazard) -> Self {
-        route.join_inputs(RouteMode::Linear);
-
+    pub fn with_hazard<H, T>(route: Route, handler: H, hazard: Hazard) -> Self
+    where
+        H: Handler<T, ()>,
+        T: 'static,
+    {
         let mut hazards = Hazards::init();
         hazards.add(hazard);
 
-        Self {
-            route,
-            hazards,
-            handler,
-            handler_type: PhantomData,
-        }
+        Self::init(route, hazards, handler)
     }
 
     /// Creates a new [`DeviceAction`] with [`Hazard`]s.
-    pub fn with_hazards(mut route: Route, handler: H, input_hazards: &'static [Hazard]) -> Self {
-        route.join_inputs(RouteMode::Linear);
-
+    pub fn with_hazards<H, T>(route: Route, handler: H, input_hazards: &'static [Hazard]) -> Self
+    where
+        H: Handler<T, ()>,
+        T: 'static,
+    {
         let mut hazards = Hazards::init();
         input_hazards.iter().for_each(|hazard| {
             hazards.add(*hazard);
         });
 
-        Self {
-            route,
-            hazards,
-            handler,
-            handler_type: PhantomData,
-        }
+        Self::init(route, hazards, handler)
     }
 
     /// Checks whether a [`DeviceAction`] misses a specific [`Hazard`].
@@ -142,11 +122,32 @@ where
     pub fn miss_hazards(&self, hazards: &'static [Hazard]) -> bool {
         !hazards.iter().all(|hazard| self.hazards.contains(*hazard))
     }
+
+    fn init<H, T>(mut route: Route, hazards: Hazards, handler: H) -> Self
+    where
+        H: Handler<T, ()>,
+        T: 'static,
+    {
+        route.join_inputs(RouteMode::Linear);
+
+        Self {
+            hazards,
+            router: Router::new().route(
+                route.route(),
+                match route.kind() {
+                    RestKind::Get => axum::routing::get(handler),
+                    RestKind::Put => axum::routing::put(handler),
+                    RestKind::Post => axum::routing::post(handler),
+                },
+            ),
+            route,
+        }
+    }
 }
 
 // A route with its associated hazards.
 #[derive(Debug)]
-pub(crate) struct RouteHazards {
+struct RouteHazards {
     // Route information.
     route: Route,
     // Hazards.
@@ -192,7 +193,7 @@ where
     // Main device route.
     main_route: &'static str,
     // All device routes and their hazards.
-    pub(crate) routes: FnvIndexSet<RouteHazards, MAXIMUM_ELEMENTS>,
+    routes: FnvIndexSet<RouteHazards, MAXIMUM_ELEMENTS>,
     // Router.
     pub(crate) router: Router,
     // Device state.
@@ -239,20 +240,8 @@ where
     }
 
     /// Adds a [`DeviceAction`].
-    pub fn add_action<H, T>(mut self, device_chainer: DeviceAction<H, T>) -> Self
-    where
-        H: Handler<T, ()>,
-        T: 'static,
-    {
-        self.router = self.router.merge(Router::new().route(
-            device_chainer.route.route(),
-            match device_chainer.route.kind() {
-                RestKind::Get => axum::routing::get(device_chainer.handler),
-                RestKind::Put => axum::routing::put(device_chainer.handler),
-                RestKind::Post => axum::routing::post(device_chainer.handler),
-            },
-        ));
-
+    pub fn add_action(mut self, device_chainer: DeviceAction) -> Self {
+        self.router = self.router.merge(device_chainer.router);
         let _ = self.routes.insert(RouteHazards::new(
             device_chainer.route,
             device_chainer.hazards,
@@ -268,6 +257,13 @@ where
     // Sets internal state.
     pub(crate) fn internal_state(mut self, state: Option<S>) -> Self {
         self.state = state;
+        self
+    }
+
+    // Finalizes a device composing all correct routes.
+    #[inline]
+    pub(crate) fn finalize(mut self) -> Self {
+        self.router = Router::new().nest(self.main_route, self.router);
         self
     }
 }

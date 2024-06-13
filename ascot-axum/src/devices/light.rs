@@ -1,8 +1,6 @@
 use ascot_library::device::DeviceKind;
 use ascot_library::hazards::Hazard;
 
-use axum::handler::Handler;
-
 use crate::device::{Device, DeviceAction, DeviceBuilder};
 use crate::error::{Error, ErrorKind, Result};
 
@@ -51,16 +49,7 @@ where
     S: Clone + Send + Sync + 'static,
 {
     /// Creates a new [`Light`] instance.
-    pub fn new<H, T, H1, T1>(
-        turn_light_on: DeviceAction<H, T>,
-        turn_light_off: DeviceAction<H1, T1>,
-    ) -> Result<Self>
-    where
-        H: Handler<T, ()>,
-        T: 'static,
-        H1: Handler<T1, ()>,
-        T1: 'static,
-    {
+    pub fn new(turn_light_on: DeviceAction, turn_light_off: DeviceAction) -> Result<Self> {
         // Raise an error whether turn light_on does not contain a
         // fire hazard.
         if turn_light_on.miss_hazard(TURN_LIGHT_ON) {
@@ -90,11 +79,7 @@ where
     }
 
     /// Adds an additional action for a [`Light`].
-    pub fn add_action<H, T>(mut self, light_action: DeviceAction<H, T>) -> Result<Self>
-    where
-        H: Handler<T, ()>,
-        T: 'static,
-    {
+    pub fn add_action(mut self, light_action: DeviceAction) -> Result<Self> {
         // Return an error if action hazards are not a subset of allowed hazards.
         for hazard in light_action.hazards.iter() {
             if !self.allowed_hazards.contains(hazard) {

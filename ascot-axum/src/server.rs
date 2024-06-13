@@ -133,6 +133,9 @@ where
         // Serialize device information returning a json format.
         let device_info = serde_json::to_value(self.device.serialize_data())?;
 
+        // Finalize a device composing all correct routes.
+        let device = self.device.finalize();
+
         // Create the main router.
         //
         //- Save device info as a json format which is returned when a query to
@@ -147,9 +150,9 @@ where
                 self.well_known_uri,
                 axum::routing::get(move || async { Redirect::to("/") }),
             )
-            .merge(self.device.router);
+            .merge(device.router);
 
-        Ok(if let Some(state) = self.device.state {
+        Ok(if let Some(state) = device.state {
             router.layer(Extension(state))
         } else {
             router

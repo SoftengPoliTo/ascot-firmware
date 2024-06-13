@@ -1,7 +1,6 @@
 use ascot_library::device::DeviceKind;
 use ascot_library::hazards::Hazard;
 
-use axum::handler::Handler;
 use heapless::FnvIndexSet;
 
 use crate::device::{Device, DeviceAction, DeviceBuilder};
@@ -97,14 +96,7 @@ where
     }
 
     /// Adds increase temperature action for a [`Fridge`].
-    pub fn increase_temperature<H, T>(
-        mut self,
-        increase_temperature: DeviceAction<H, T>,
-    ) -> Result<Self>
-    where
-        H: Handler<T, ()>,
-        T: 'static,
-    {
+    pub fn increase_temperature(mut self, increase_temperature: DeviceAction) -> Result<Self> {
         // Raise an error whether increase_temperature does not contain
         // electric energy consumption or spoiled food hazards.
         if increase_temperature.miss_hazards(INCREASE_TEMPERATURE) {
@@ -123,14 +115,7 @@ where
     }
 
     /// Adds decrease temperature action for a [`Fridge`].
-    pub fn decrease_temperature<H, T>(
-        mut self,
-        decrease_temperature: DeviceAction<H, T>,
-    ) -> Result<Self>
-    where
-        H: Handler<T, ()>,
-        T: 'static,
-    {
+    pub fn decrease_temperature(mut self, decrease_temperature: DeviceAction) -> Result<Self> {
         // Raise an error whether decrease_temperature does not contain
         // electric energy consumption hazard.
         if decrease_temperature.miss_hazard(DECREASE_TEMPERATURE) {
@@ -149,11 +134,7 @@ where
     }
 
     /// Adds an additional action for a [`Fridge`].
-    pub fn add_action<H, T>(mut self, fridge_action: DeviceAction<H, T>) -> Result<Self>
-    where
-        H: Handler<T, ()>,
-        T: 'static,
-    {
+    pub fn add_action(mut self, fridge_action: DeviceAction) -> Result<Self> {
         // Return an error if action hazards are not a subset of allowed hazards.
         for hazard in fridge_action.hazards.iter() {
             if !self.allowed_hazards.contains(hazard) {
