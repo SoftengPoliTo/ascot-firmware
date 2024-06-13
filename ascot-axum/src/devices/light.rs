@@ -3,7 +3,7 @@ use ascot_library::hazards::Hazard;
 
 use axum::handler::Handler;
 
-use crate::device::{Device, DeviceAction};
+use crate::device::{Device, DeviceAction, DeviceBuilder};
 use crate::error::{Error, ErrorKind, Result};
 
 // The default main route for a light.
@@ -33,6 +33,17 @@ where
     device: Device<S>,
     // Allowed light hazards.
     allowed_hazards: &'static [Hazard],
+}
+
+impl<S> DeviceBuilder<S> for Light<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn into_device(self) -> Device<S> {
+        self.device
+            .main_route(self.main_route)
+            .internal_state(self.state)
+    }
 }
 
 impl<S> Light<S>
@@ -107,8 +118,6 @@ where
 
     /// Builds a new [`Device`].
     pub fn build(self) -> Device<S> {
-        let mut device = self.device.main_route(self.main_route).finalize();
-        device.state = self.state;
-        device
+        self.into_device()
     }
 }

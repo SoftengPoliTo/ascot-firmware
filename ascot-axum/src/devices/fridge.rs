@@ -4,7 +4,7 @@ use ascot_library::hazards::Hazard;
 use axum::handler::Handler;
 use heapless::FnvIndexSet;
 
-use crate::device::{Device, DeviceAction};
+use crate::device::{Device, DeviceAction, DeviceBuilder};
 use crate::error::{Error, ErrorKind, Result};
 use crate::MAXIMUM_ELEMENTS;
 
@@ -12,11 +12,13 @@ use crate::MAXIMUM_ELEMENTS;
 const FRIDGE_MAIN_ROUTE: &str = "/fridge";
 
 // Mandatory actions hazards.
-const INCREASE_TEMPERATURE: &'static [Hazard] = &[Hazard::ElectricEnergyConsumption, Hazard::SpoiledFood];
+const INCREASE_TEMPERATURE: &'static [Hazard] =
+    &[Hazard::ElectricEnergyConsumption, Hazard::SpoiledFood];
 const DECREASE_TEMPERATURE: Hazard = Hazard::ElectricEnergyConsumption;
 
 // Allowed hazards.
-const ALLOWED_HAZARDS: &'static [Hazard] = &[Hazard::ElectricEnergyConsumption, Hazard::SpoiledFood];
+const ALLOWED_HAZARDS: &'static [Hazard] =
+    &[Hazard::ElectricEnergyConsumption, Hazard::SpoiledFood];
 
 // Mandatory fridge actions.
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -45,6 +47,17 @@ where
     mandatory_actions: FnvIndexSet<Actions, MAXIMUM_ELEMENTS>,
     // Allowed fridge hazards.
     allowed_hazards: &'static [Hazard],
+}
+
+impl<S> DeviceBuilder<S> for Fridge<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn into_device(self) -> Device<S> {
+        self.device
+            .main_route(self.main_route)
+            .internal_state(self.state)
+    }
 }
 
 impl<S> Fridge<S>
@@ -168,9 +181,6 @@ where
             ));
         };
 
-        let mut device = self.device.main_route(self.main_route).finalize();
-        device.state = self.state;
-
-        Ok(device)
+        Ok(self.into_device())
     }
 }

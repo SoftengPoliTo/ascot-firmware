@@ -173,6 +173,14 @@ impl RouteHazards {
     }
 }
 
+// Build a device from a precise device.
+pub(crate) trait DeviceBuilder<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn into_device(self) -> Device<S>;
+}
+
 /// A general smart home device.
 #[derive(Debug)]
 pub struct Device<S>
@@ -253,18 +261,13 @@ where
     }
 
     /// Sets a device state.
-    pub fn state(mut self, state: S) -> Self {
-        self.state = Some(state);
-        self
+    pub fn state(self, state: S) -> Self {
+        self.internal_state(Some(state))
     }
 
-    /// Finalizes a [`Device`] creating the final device which will be
-    /// executed by the server.
-    pub fn finalize(self) -> Device<S> {
-        let mut device = Device::new(self.kind).main_route(self.main_route);
-        device.router = Router::new().nest(self.main_route, self.router);
-        device.routes = self.routes;
-        device.state = self.state;
-        device
+    // Sets internal state.
+    pub(crate) fn internal_state(mut self, state: Option<S>) -> Self {
+        self.state = state;
+        self
     }
 }
