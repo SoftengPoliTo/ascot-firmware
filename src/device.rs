@@ -9,18 +9,18 @@ use crate::ShortString;
 
 /// A device response payload for a determined action.
 #[derive(Serialize, Deserialize)]
-pub struct DevicePayload(Option<Value>);
+pub struct DevicePayload(Value);
 
 impl DevicePayload {
     /// Creates an empty [`DevicePayload`].
     pub fn empty() -> Self {
-        Self(None)
+        Self(serde_json::json!({"payload": null}))
     }
 
     /// Creates a new [`DevicePayload`].
     pub fn new(value: impl Serialize) -> core::result::Result<Self, DeviceError> {
         serde_json::to_value(value)
-            .map(|value| Self(Some(value)))
+            .map(Self)
             .map_err(DeviceError::from_serialize)
     }
 }
