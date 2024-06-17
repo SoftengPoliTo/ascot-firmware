@@ -14,6 +14,7 @@ use heapless::FnvIndexSet;
 
 use serde::Serialize;
 
+use crate::output_type::private::OutputTypeName;
 use crate::MAXIMUM_ELEMENTS;
 
 // Default main route for a device.
@@ -81,7 +82,7 @@ impl DeviceAction {
     /// Creates a new [`DeviceAction`].
     pub fn no_hazards<H, T>(route: Route, handler: H) -> Self
     where
-        H: Handler<T, ()>,
+        H: Handler<T, ()> + OutputTypeName<T>,
         T: 'static,
     {
         Self::init(route, Hazards::init(), handler)
@@ -90,7 +91,7 @@ impl DeviceAction {
     /// Creates a new [`DeviceAction`] with a single [`Hazard`].
     pub fn with_hazard<H, T>(route: Route, handler: H, hazard: Hazard) -> Self
     where
-        H: Handler<T, ()>,
+        H: Handler<T, ()> + OutputTypeName<T>,
         T: 'static,
     {
         let mut hazards = Hazards::init();
@@ -102,7 +103,7 @@ impl DeviceAction {
     /// Creates a new [`DeviceAction`] with [`Hazard`]s.
     pub fn with_hazards<H, T>(route: Route, handler: H, input_hazards: &'static [Hazard]) -> Self
     where
-        H: Handler<T, ()>,
+        H: Handler<T, ()> + OutputTypeName<T>,
         T: 'static,
     {
         let mut hazards = Hazards::init();
@@ -125,7 +126,7 @@ impl DeviceAction {
 
     fn init<H, T>(mut route: Route, hazards: Hazards, handler: H) -> Self
     where
-        H: Handler<T, ()>,
+        H: Handler<T, ()> + OutputTypeName<T>,
         T: 'static,
     {
         route.join_inputs(RouteMode::Linear);

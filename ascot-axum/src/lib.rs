@@ -11,6 +11,7 @@ pub mod extract {
     pub use axum::extract::{Extension, Json, Path};
 }
 
+mod output_type;
 mod services;
 
 // Maximum stack elements.
