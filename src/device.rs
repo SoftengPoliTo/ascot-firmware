@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::error::Category;
 use serde_json::value::Value;
 
-use crate::route::Routes;
+use crate::route::RouteConfigs;
 use crate::ShortString;
 
 /// A device response payload for a determined action.
@@ -89,12 +89,12 @@ impl DeviceError {
 pub struct DeviceData<'a> {
     /// Device kind.
     pub kind: DeviceKind,
-    /// Main device route.
+    /// Device main route.
     #[serde(rename = "main route")]
     pub main_route: &'a str,
     #[serde(borrow)]
-    /// All device routes.
-    pub routes: Routes<'a>,
+    /// All device route configurations.
+    pub route_configs: RouteConfigs<'a>,
 }
 
 /// A device kind.

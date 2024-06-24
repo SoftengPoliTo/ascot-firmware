@@ -1,4 +1,4 @@
-use heapless::Vec;
+use heapless::{FnvIndexSet, IndexSetIter, Vec};
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
@@ -74,20 +74,20 @@ pub struct RouteConfig<'a> {
 
 /// A collection of [`RouteConfig`]s.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Routes<'a>(#[serde(borrow)] Vec<RouteConfig<'a>, MAXIMUM_ELEMENTS>);
+pub struct RouteConfigs<'a>(#[serde(borrow)] Vec<RouteConfig<'a>, MAXIMUM_ELEMENTS>);
 
-impl<'a> Routes<'a> {
-    /// Initializes a new [`Routes`] collection.
+impl<'a> RouteConfigs<'a> {
+    /// Initializes a new [`RouteConfigs`] collection.
     pub fn init() -> Self {
         Self(Vec::new())
     }
 
-    /// Adds a new [`RouteConfig`] to the [`Routes`] collection.
+    /// Adds a new [`RouteConfig`] to the [`RouteConfigs`] collection.
     pub fn add(&mut self, route_config: RouteConfig<'a>) {
         let _ = self.0.push(route_config);
     }
 
-    /// Whether the [`Routes`] collection is empty.
+    /// Whether the [`RouteConfigs`] collection is empty.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -217,20 +217,6 @@ impl Route {
         self.rest_kind
     }
 
-    /// Serializes [`Route`] data.
-    pub fn serialize_data(&self, hazards: &Hazards) -> RouteConfig {
-        RouteConfig {
-            rest_kind: self.rest_kind,
-            hazards: HazardsData::from_hazards(hazards),
-            data: RouteData {
-                name: self.route(),
-                description: self.description,
-                stateless: self.stateless,
-                inputs: InputsData::from_inputs(&self.inputs),
-            },
-        }
-    }
-
     fn init(rest_kind: RestKind, route: &'static str) -> Self {
         Self {
             route,
@@ -240,5 +226,80 @@ impl Route {
             inputs: Inputs::init(),
             inputs_route: MiniString::empty(),
         }
+    }
+}
+
+/// A route with its associated hazards.
+#[derive(Debug)]
+pub struct RouteHazards {
+    /// Route.
+    route: Route,
+    /// Hazards.
+    hazards: Hazards,
+}
+
+impl core::cmp::PartialEq for RouteHazards {
+    fn eq(&self, other: &Self) -> bool {
+        self.route.eq(&other.route)
+    }
+}
+
+impl core::cmp::Eq for RouteHazards {}
+
+impl core::hash::Hash for RouteHazards {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.route.hash(state);
+    }
+}
+
+impl RouteHazards {
+    /// Creates a new [`RouteHazards`].
+    pub fn new(route: Route, hazards: Hazards) -> Self {
+        Self { route, hazards }
+    }
+
+    /// Serializes [`RouteHazards`] data.
+    pub fn serialize_data(&self) -> RouteConfig {
+        RouteConfig {
+            rest_kind: self.route.rest_kind,
+            hazards: HazardsData::from_hazards(&self.hazards),
+            data: RouteData {
+                name: self.route.route(),
+                description: self.route.description,
+                stateless: self.route.stateless,
+                inputs: InputsData::from_inputs(&self.route.inputs),
+            },
+        }
+    }
+}
+
+/// A collection of [`RouteHazards`]s.
+#[derive(Debug)]
+pub struct RoutesHazards(FnvIndexSet<RouteHazards, MAXIMUM_ELEMENTS>);
+
+impl RoutesHazards {
+    /// Initializes a new [`RoutesHazards`] collection.
+    pub fn init() -> Self {
+        Self(FnvIndexSet::new())
+    }
+
+    /// Adds a new [`RouteHazards`] to the [`RoutesHazards`] collection.
+    pub fn add(&mut self, route_hazards: RouteHazards) {
+        let _ = self.0.insert(route_hazards);
+    }
+
+    /// Whether the [`RoutesHazards`] collection is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Checks whether a [`RouteHazards`] is contained into [`RoutesHazards`].
+    pub fn contains(&self, route_hazards: &RouteHazards) -> bool {
+        self.0.contains(route_hazards)
+    }
+
+    /// Returns an iterator over [`RouteHazards`]s.
+    pub fn iter(&self) -> IndexSetIter<'_, RouteHazards> {
+        self.0.iter()
     }
 }
