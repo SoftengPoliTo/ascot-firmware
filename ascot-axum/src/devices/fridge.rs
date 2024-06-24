@@ -5,7 +5,6 @@ use heapless::FnvIndexSet;
 
 use crate::device::{Device, DeviceAction, DeviceBuilder};
 use crate::error::{Error, ErrorKind, Result};
-use crate::MAXIMUM_ELEMENTS;
 
 // The default main route for a fridge.
 const FRIDGE_MAIN_ROUTE: &str = "/fridge";
@@ -41,7 +40,7 @@ where
     // Device.
     device: Device<S>,
     // Mandatory fridge actions.
-    mandatory_actions: FnvIndexSet<Actions, MAXIMUM_ELEMENTS>,
+    mandatory_actions: FnvIndexSet<Actions, 2>,
     // Allowed fridge hazards.
     allowed_hazards: &'static [Hazard],
 }

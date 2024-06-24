@@ -13,6 +13,3 @@ pub mod extract {
 
 mod output_type;
 mod services;
-
-// Maximum stack elements.
-const MAXIMUM_ELEMENTS: usize = 16;

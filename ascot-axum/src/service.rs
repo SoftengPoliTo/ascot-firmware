@@ -5,7 +5,9 @@ use heapless::FnvIndexMap;
 
 use crate::error::Result;
 use crate::server::DEFAULT_SERVER_PORT;
-use crate::MAXIMUM_ELEMENTS;
+
+// Maximum stack elements.
+const MAXIMUM_ELEMENTS: usize = 16;
 
 // Service type
 //

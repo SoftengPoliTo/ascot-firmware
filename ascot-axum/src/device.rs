@@ -1,6 +1,6 @@
 use ascot_library::device::{DeviceData, DeviceErrorKind, DeviceKind, DeviceSerializer};
 use ascot_library::hazards::{Hazard, Hazards};
-use ascot_library::route::{RestKind, Route, RouteMode, Routes};
+use ascot_library::route::{RestKind, Route, RouteConfigs, RouteHazards, RouteMode, RoutesHazards};
 
 use axum::{
     extract::Json,
@@ -10,12 +10,9 @@ use axum::{
     Router,
 };
 
-use heapless::FnvIndexSet;
-
 use serde::Serialize;
 
 use crate::output_type::private::OutputTypeName;
-use crate::MAXIMUM_ELEMENTS;
 
 // Default main route for a device.
 const DEFAULT_MAIN_ROUTE: &str = "/device";
@@ -146,35 +143,6 @@ impl DeviceAction {
     }
 }
 
-// A route with its associated hazards.
-#[derive(Debug)]
-struct RouteHazards {
-    // Route information.
-    route: Route,
-    // Hazards.
-    hazards: Hazards,
-}
-
-impl core::cmp::PartialEq for RouteHazards {
-    fn eq(&self, other: &Self) -> bool {
-        self.route.eq(&other.route)
-    }
-}
-
-impl core::cmp::Eq for RouteHazards {}
-
-impl core::hash::Hash for RouteHazards {
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.route.hash(state);
-    }
-}
-
-impl RouteHazards {
-    pub(crate) fn new(route: Route, hazards: Hazards) -> Self {
-        Self { route, hazards }
-    }
-}
-
 // Build a device from a precise device.
 pub(crate) trait DeviceBuilder<S>
 where
@@ -194,7 +162,7 @@ where
     // Main device route.
     main_route: &'static str,
     // All device routes and their hazards.
-    routes: FnvIndexSet<RouteHazards, MAXIMUM_ELEMENTS>,
+    routes_hazards: RoutesHazards,
     // Router.
     pub(crate) router: Router,
     // Device state.
@@ -206,15 +174,15 @@ where
     S: Clone + Send + Sync + 'static,
 {
     fn serialize_data(&self) -> DeviceData {
-        let mut routes = Routes::init();
-        for route_hazards in self.routes.into_iter() {
-            routes.add(route_hazards.route.serialize_data(&route_hazards.hazards));
+        let mut route_configs = RouteConfigs::init();
+        for route_hazards in self.routes_hazards.iter() {
+            route_configs.add(route_hazards.serialize_data());
         }
 
         DeviceData {
             kind: self.kind,
             main_route: self.main_route,
-            routes,
+            route_configs,
         }
     }
 }
@@ -228,7 +196,7 @@ where
         Self {
             kind,
             main_route: DEFAULT_MAIN_ROUTE,
-            routes: FnvIndexSet::new(),
+            routes_hazards: RoutesHazards::init(),
             router: Router::new(),
             state: None,
         }
@@ -243,7 +211,7 @@ where
     /// Adds a [`DeviceAction`].
     pub fn add_action(mut self, device_chainer: DeviceAction) -> Self {
         self.router = self.router.merge(device_chainer.router);
-        let _ = self.routes.insert(RouteHazards::new(
+        self.routes_hazards.add(RouteHazards::new(
             device_chainer.route,
             device_chainer.hazards,
         ));
