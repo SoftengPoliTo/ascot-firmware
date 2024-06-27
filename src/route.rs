@@ -233,9 +233,9 @@ impl Route {
 #[derive(Debug)]
 pub struct RouteHazards {
     /// Route.
-    route: Route,
+    pub route: Route,
     /// Hazards.
-    hazards: Hazards,
+    pub hazards: Hazards,
 }
 
 impl core::cmp::PartialEq for RouteHazards {
