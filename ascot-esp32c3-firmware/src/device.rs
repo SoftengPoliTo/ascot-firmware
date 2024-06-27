@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 
 use ascot_library::device::{DeviceData, DeviceKind, DeviceSerializer};
 use ascot_library::hazards::{Hazard, Hazards};
-use ascot_library::route::{Route, RouteMode, Routes};
+use ascot_library::route::{Route, RouteConfigs, RouteHazards};
 
 use esp_idf_svc::http::server::{Connection, FnHandler, Request};
 
@@ -23,10 +23,8 @@ where
     F: Fn(Request<&mut C>) -> Result<(), E> + Send,
     E: Debug,
 {
-    // Route.
-    pub(crate) route: Route,
-    // Hazards.
-    pub(crate) hazards: Hazards,
+    // Route and hazards.
+    pub(crate) route_hazards: RouteHazards,
     // Handler.
     pub(crate) handler: FnHandler<F>,
     // Handler connection.
@@ -66,18 +64,19 @@ where
 
     /// Checks whether a [`DeviceAction`] misses a specific [`Hazard`].
     pub fn miss_hazard(&self, hazard: Hazard) -> bool {
-        !self.hazards.contains(hazard)
+        !self.route_hazards.hazards.contains(hazard)
     }
 
     /// Checks whether a [`DeviceAction`] misses the given [`Hazard`]s.
     pub fn miss_hazards(&self, hazards: &'static [Hazard]) -> bool {
-        !hazards.iter().all(|hazard| self.hazards.contains(*hazard))
+        !hazards
+            .iter()
+            .all(|hazard| self.route_hazards.hazards.contains(*hazard))
     }
 
     fn init(route: Route, function: F, hazards: Hazards) -> Self {
         Self {
-            route,
-            hazards,
+            route_hazards: RouteHazards::new(route, hazards),
             handler: FnHandler::new(function),
             handler_connection: PhantomData,
             handler_error: PhantomData,
@@ -92,7 +91,7 @@ where
     E: Debug,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.route.eq(&other.route)
+        self.route_hazards.route.eq(&other.route_hazards.route)
     }
 }
 
@@ -111,7 +110,7 @@ where
     E: Debug,
 {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.route.hash(state);
+        self.route_hazards.route.hash(state);
     }
 }
 
@@ -128,10 +127,6 @@ where
     main_route: &'static str,
     // All device routes with their hazards and hanlders.
     pub(crate) routes_data: FnvIndexSet<DeviceAction<C, E, F>, MAXIMUM_ELEMENTS>,
-    // Handler connection.
-    handler_connection: PhantomData<C>,
-    // Handler error.
-    handler_error: PhantomData<E>,
 }
 
 impl<C, E, F> DeviceSerializer for Device<C, E, F>
@@ -141,15 +136,15 @@ where
     E: Debug,
 {
     fn serialize_data(&self) -> DeviceData {
-        let mut routes = Routes::init();
+        let mut route_configs = RouteConfigs::init();
         for route_data in self.routes_data.into_iter() {
-            routes.add(route_data.route.serialize_data(&route_data.hazards));
+            route_configs.add(route_data.route_hazards.serialize_data());
         }
 
         DeviceData {
             kind: self.kind,
             main_route: self.main_route,
-            routes,
+            route_configs,
         }
     }
 }
@@ -166,8 +161,6 @@ where
             kind,
             main_route: DEFAULT_MAIN_ROUTE,
             routes_data: FnvIndexSet::new(),
-            handler_connection: PhantomData,
-            handler_error: PhantomData,
         }
     }
 
