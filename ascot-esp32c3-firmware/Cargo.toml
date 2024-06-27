@@ -16,8 +16,8 @@ opt-level = "z"
 [dependencies]
 ascot-library = { path = "../" }
 anyhow = "1"
-embedded-svc = { version = "0.27", default-features = false }
-esp-idf-svc = "0.48.1"
+embedded-svc = { version = "0.28", default-features = false }
+esp-idf-svc = "0.49.0"
 heapless = "0.8.0"
 log = { version = "0.4", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"] }
@@ -25,5 +25,5 @@ serde_json = { version = "1", default-features = false, features = ["alloc"] }
 toml-cfg = "0.2.0"
 
 [build-dependencies]
-embuild  = "0.31.4"
+embuild  = "0.32.0"
 toml-cfg = "0.2.0"
