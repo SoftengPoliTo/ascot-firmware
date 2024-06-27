@@ -11,7 +11,9 @@ use embedded_svc::{
     io::{Read, Write},
 };
 
-use esp_idf_svc::http::server::{Configuration, Connection, EspHttpServer, FnHandler, Request};
+use esp_idf_svc::http::server::{
+    Configuration, EspHttpConnection, EspHttpServer, FnHandler, Request,
+};
 
 use serde::Deserialize;
 
@@ -42,13 +44,10 @@ const MAX_LEN: usize = 128;
 // Stack size needed to parse a JSON file
 const STACK_SIZE: usize = 10240;
 
-static INDEX_HTML: &str = include_str!("../http_server_page.html");
-
 /// The `Ascot` server.
-pub struct AscotServer<C, E, F>
+pub struct AscotServer<E, F>
 where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
     E: Debug,
 {
     // HTTP address.
@@ -62,17 +61,16 @@ where
     // Server configuration.
     configuration: Configuration,
     // Device.
-    device: Device<C, E, F>,
+    device: Device<E, F>,
 }
 
-impl<C, E, F> AscotServer<C, E, F>
+impl<E, F> AscotServer<E, F>
 where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
     E: Debug,
 {
     /// Creates a new [`AscotServer`] instance.
-    pub fn new(device: Device<C, E, F>) -> Self {
+    pub fn new(device: Device<E, F>) -> Self {
         let configuration = Configuration {
             stack_size: STACK_SIZE,
             ..Default::default()
@@ -127,15 +125,12 @@ where
     }*/
 
     /// Runs a smart home device on the server.
-    pub async fn run(self) -> anyhow::Result<()> {
+    pub fn run(self) -> anyhow::Result<()> {
         let mut server = EspHttpServer::new(&self.configuration)?;
 
-        server.fn_handler::<anyhow::Error, _>("/", Method::Get, |req| {
-            req.into_ok_response()?
-                .write_all(INDEX_HTML.as_bytes())
-                .map(|_| ())
-                .map_err(|e| e.into())
-        })?;
+        for route in self.device.routes_data.into_iter() {
+            server.fn_handler("/", Method::Get, route.handler)?;
+        }
 
         loop {
             sleep(Duration::from_millis(1000));
@@ -143,7 +138,7 @@ where
     }
 }
 
-pub(crate) fn run_server() -> anyhow::Result<()> {
+/*pub(crate) fn run_server() -> anyhow::Result<()> {
     let server_configuration = esp_idf_svc::http::server::Configuration {
         stack_size: STACK_SIZE,
         ..Default::default()
@@ -193,4 +188,4 @@ pub(crate) fn run_server() -> anyhow::Result<()> {
     loop {
         sleep(Duration::from_millis(1000));
     }
-}
+}*/

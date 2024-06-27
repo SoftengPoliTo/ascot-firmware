@@ -7,16 +7,22 @@ mod server;
 mod wifi;
 
 // Library.
-use ascot_library::device::DeviceErrorKind;
+use ascot_library::device::{DeviceErrorKind, DeviceKind};
 use ascot_library::hazards::Hazard;
 use ascot_library::input::Input;
 use ascot_library::route::Route;
 
 use esp_idf_svc::hal::prelude::Peripherals;
+use esp_idf_svc::io::EspIOError;
 use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
 
-use crate::server::run_server;
+use embedded_svc::io::Write;
+
+use crate::device::{Device, DeviceAction};
+use crate::server::AscotServer;
 use crate::wifi::connect_wifi;
+
+static INDEX_HTML: &str = include_str!("../http_server_page.html");
 
 fn main() -> anyhow::Result<()> {
     /* 1. Define device passing closure (we need to Box I suppose!!!)
@@ -43,11 +49,24 @@ fn main() -> anyhow::Result<()> {
      * 3. Run everything else
     */
 
+    esp_idf_svc::sys::link_patches();
+    esp_idf_svc::log::EspLogger::initialize_default();
+
+    let peripherals = Peripherals::take()?;
+    let sys_loop = EspSystemEventLoop::take()?;
+    let nvs = EspDefaultNvsPartition::take()?;
+
+    // Connects to Wi-Fi
+    let _wifi = connect_wifi(peripherals.modem, sys_loop, nvs)?;
+
     // Configuration for the `PUT` turn light on route.
-    let light_on_config = Route::put("/on").description("Turn light on.").inputs([
-        Input::rangef64("brightness", (0., 20., 0.1, 0.)),
-        Input::boolean("save-energy", false),
-    ]);
+    let light_on_config = Route::put("/on").description("Turn light on.");
+
+    let light_on_action = DeviceAction::no_hazards(light_on_config, |req| {
+        req.into_ok_response()?
+            .write_all(INDEX_HTML.as_bytes())
+            .map(|_| ())
+    });
 
     // Configuration for the `POST` turn light on route.
     let light_on_post_config = Route::post("/on").description("Turn light on.").inputs([
@@ -61,17 +80,9 @@ fn main() -> anyhow::Result<()> {
     // Configuration for the toggle route.
     let toggle_config = Route::put("/toggle").description("Toggle a light.");
 
-    esp_idf_svc::sys::link_patches();
-    esp_idf_svc::log::EspLogger::initialize_default();
+    let device = Device::new(DeviceKind::Light).add_action(light_on_action);
 
-    let peripherals = Peripherals::take()?;
-    let sys_loop = EspSystemEventLoop::take()?;
-    let nvs = EspDefaultNvsPartition::take()?;
-
-    // connects to wi-fi
-    let _wifi = connect_wifi(peripherals.modem, sys_loop, nvs)?;
-
-    run_server()?;
+    AscotServer::new(device).run()?;
 
     Ok(())
 }

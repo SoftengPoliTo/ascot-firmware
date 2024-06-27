@@ -5,9 +5,9 @@ use ascot_library::device::{DeviceData, DeviceKind, DeviceSerializer};
 use ascot_library::hazards::{Hazard, Hazards};
 use ascot_library::route::{Route, RouteConfigs, RouteHazards};
 
-use esp_idf_svc::http::server::{Connection, FnHandler, Request};
+use esp_idf_svc::http::server::{EspHttpConnection, FnHandler, Request};
 
-use heapless::FnvIndexSet;
+use heapless::Vec;
 
 // Default main route for a device.
 const DEFAULT_MAIN_ROUTE: &str = "/device";
@@ -17,26 +17,22 @@ const MAXIMUM_ELEMENTS: usize = 16;
 
 /// A device action connects a server route with a device handler and,
 /// optionally, with every possible hazards associated with the handler.
-pub struct DeviceAction<C, E, F>
+pub struct DeviceAction<E, F>
 where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
     E: Debug,
 {
     // Route and hazards.
     pub(crate) route_hazards: RouteHazards,
     // Handler.
-    pub(crate) handler: FnHandler<F>,
-    // Handler connection.
-    handler_connection: PhantomData<C>,
+    pub(crate) handler: F,
     // Handler error.
     handler_error: PhantomData<E>,
 }
 
-impl<C, E, F> DeviceAction<C, E, F>
+impl<E, F> DeviceAction<E, F>
 where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
     E: Debug,
 {
     /// Creates a new [`DeviceAction`].
@@ -77,48 +73,16 @@ where
     fn init(route: Route, function: F, hazards: Hazards) -> Self {
         Self {
             route_hazards: RouteHazards::new(route, hazards),
-            handler: FnHandler::new(function),
-            handler_connection: PhantomData,
+            handler: function,
             handler_error: PhantomData,
         }
     }
 }
 
-impl<C, E, F> core::cmp::PartialEq for DeviceAction<C, E, F>
-where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
-    E: Debug,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.route_hazards.route.eq(&other.route_hazards.route)
-    }
-}
-
-impl<C, E, F> core::cmp::Eq for DeviceAction<C, E, F>
-where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
-    E: Debug,
-{
-}
-
-impl<C, E, F> core::hash::Hash for DeviceAction<C, E, F>
-where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
-    E: Debug,
-{
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.route_hazards.route.hash(state);
-    }
-}
-
 /// A general smart home device.
-pub struct Device<C, E, F>
+pub struct Device<E, F>
 where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
     E: Debug,
 {
     // Kind.
@@ -126,18 +90,17 @@ where
     // Main device route.
     main_route: &'static str,
     // All device routes with their hazards and hanlders.
-    pub(crate) routes_data: FnvIndexSet<DeviceAction<C, E, F>, MAXIMUM_ELEMENTS>,
+    pub(crate) routes_data: Vec<DeviceAction<E, F>, MAXIMUM_ELEMENTS>,
 }
 
-impl<C, E, F> DeviceSerializer for Device<C, E, F>
+impl<E, F> DeviceSerializer for Device<E, F>
 where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
     E: Debug,
 {
     fn serialize_data(&self) -> DeviceData {
         let mut route_configs = RouteConfigs::init();
-        for route_data in self.routes_data.into_iter() {
+        for route_data in self.routes_data.iter() {
             route_configs.add(route_data.route_hazards.serialize_data());
         }
 
@@ -149,10 +112,9 @@ where
     }
 }
 
-impl<C, E, F> Device<C, E, F>
+impl<E, F> Device<E, F>
 where
-    C: Connection,
-    F: Fn(Request<&mut C>) -> Result<(), E> + Send,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
     E: Debug,
 {
     /// Creates a new [`Device`] instance.
@@ -160,7 +122,7 @@ where
         Self {
             kind,
             main_route: DEFAULT_MAIN_ROUTE,
-            routes_data: FnvIndexSet::new(),
+            routes_data: Vec::new(),
         }
     }
 
@@ -171,8 +133,8 @@ where
     }
 
     /// Adds a [`DeviceAction`].
-    pub fn add_action(mut self, device_chainer: DeviceAction<C, E, F>) -> Self {
-        let _ = self.routes_data.insert(device_chainer);
+    pub fn add_action(mut self, device_chainer: DeviceAction<E, F>) -> Self {
+        let _ = self.routes_data.push(device_chainer);
         self
     }
 }
