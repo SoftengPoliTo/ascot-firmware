@@ -4,18 +4,9 @@ use core::net::{IpAddr, Ipv4Addr};
 use std::thread::sleep;
 use std::time::Duration;
 
-use ascot_library::device::DeviceSerializer;
+use embedded_svc::http::Method;
 
-use embedded_svc::{
-    http::{Headers, Method},
-    io::{Read, Write},
-};
-
-use esp_idf_svc::http::server::{
-    Configuration, EspHttpConnection, EspHttpServer, FnHandler, Request,
-};
-
-use serde::Deserialize;
+use esp_idf_svc::http::server::{Configuration, EspHttpConnection, EspHttpServer, Request};
 
 use crate::device::Device;
 
@@ -37,9 +28,6 @@ const DEFAULT_SCHEME: &str = "http";
 // Request to the server for well-known services or information are available
 // at URLs consistent well-known locations across servers.
 const WELL_KNOWN_URI: &str = "/.well-known/ascot";
-
-// Max payload length
-const MAX_LEN: usize = 128;
 
 // Stack size needed to parse a JSON file
 const STACK_SIZE: usize = 10240;

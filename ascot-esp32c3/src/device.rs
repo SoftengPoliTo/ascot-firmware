@@ -5,7 +5,7 @@ use ascot_library::device::{DeviceData, DeviceKind, DeviceSerializer};
 use ascot_library::hazards::{Hazard, Hazards};
 use ascot_library::route::{Route, RouteConfigs, RouteHazards};
 
-use esp_idf_svc::http::server::{EspHttpConnection, FnHandler, Request};
+use esp_idf_svc::http::server::{EspHttpConnection, Request};
 
 use heapless::Vec;
 

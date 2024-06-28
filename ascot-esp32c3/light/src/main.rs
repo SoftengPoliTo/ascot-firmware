@@ -2,15 +2,16 @@
 //!
 //! Go to 192.168.71.1 to test
 
-mod device;
-mod server;
-mod wifi;
-
 // Library.
 use ascot_library::device::{DeviceErrorKind, DeviceKind};
 use ascot_library::hazards::Hazard;
 use ascot_library::input::Input;
 use ascot_library::route::Route;
+
+// Esp32
+use ascot_esp32c3::device::{Device, DeviceAction};
+use ascot_esp32c3::server::AscotServer;
+use ascot_esp32c3::wifi::connect_wifi;
 
 use esp_idf_svc::hal::prelude::Peripherals;
 use esp_idf_svc::io::EspIOError;
@@ -18,11 +19,18 @@ use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
 
 use embedded_svc::io::Write;
 
-use crate::device::{Device, DeviceAction};
-use crate::server::AscotServer;
-use crate::wifi::connect_wifi;
+// Max payload length
+const MAX_LEN: usize = 128;
 
 static INDEX_HTML: &str = include_str!("../http_server_page.html");
+
+#[toml_cfg::toml_config]
+pub struct WifiConfig {
+    #[default("")]
+    ssid: &'static str,
+    #[default("")]
+    password: &'static str,
+}
 
 fn main() -> anyhow::Result<()> {
     /* 1. Define device passing closure (we need to Box I suppose!!!)
@@ -56,8 +64,17 @@ fn main() -> anyhow::Result<()> {
     let sys_loop = EspSystemEventLoop::take()?;
     let nvs = EspDefaultNvsPartition::take()?;
 
+    // Retrieves wifi ssid and password
+    let wifi_config = WIFI_CONFIG;
+
     // Connects to Wi-Fi
-    let _wifi = connect_wifi(peripherals.modem, sys_loop, nvs)?;
+    let _wifi = connect_wifi(
+        wifi_config.ssid,
+        wifi_config.password,
+        peripherals.modem,
+        sys_loop,
+        nvs,
+    )?;
 
     // Configuration for the `PUT` turn light on route.
     let light_on_config = Route::put("/on").description("Turn light on.");
