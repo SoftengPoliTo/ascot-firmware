@@ -142,6 +142,7 @@ where
         //  the server root is requested.
         //- Redirect well-known URI to server root.
         let router = Router::new()
+            .merge(device.router)
             .route(
                 "/",
                 axum::routing::get(move || async { axum::Json(device_info) }),
@@ -149,8 +150,7 @@ where
             .route(
                 self.well_known_uri,
                 axum::routing::get(move || async { Redirect::to("/") }),
-            )
-            .merge(device.router);
+            );
 
         Ok(if let Some(state) = device.state {
             router.layer(Extension(state))
