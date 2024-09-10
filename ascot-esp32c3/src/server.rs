@@ -1,20 +1,28 @@
 use core::fmt::Debug;
-use core::net::{IpAddr, Ipv4Addr};
+use core::net::{Ipv4Addr, Ipv6Addr};
 
 use std::thread::sleep;
 use std::time::Duration;
+
+use edge_mdns::buf::{BufferAccess, VecBufAccess};
+use edge_mdns::domain::base::Ttl;
+use edge_mdns::io::{self, MdnsIoError, DEFAULT_SOCKET};
+use edge_mdns::{host::Host, HostAnswersMdnsHandler};
+use edge_nal::{UdpBind, UdpSplit};
+use edge_nal_std::Stack;
 
 use embedded_svc::http::Method;
 
 use esp_idf_svc::http::server::{Configuration, EspHttpConnection, EspHttpServer, Request};
 
-use crate::device::Device;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::signal::Signal;
 
-// Default HTTP address.
-//
-// The entire local network is considered, so the Ipv4 unspecified address is
-// used.
-const DEFAULT_HTTP_ADDRESS: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+use futures_lite::future::block_on;
+
+use rand::{thread_rng, RngCore};
+
+use crate::device::Device;
 
 // Default port.
 const DEFAULT_SERVER_PORT: u16 = 3000;
@@ -32,6 +40,9 @@ const WELL_KNOWN_URI: &str = "/.well-known/ascot";
 // Stack size needed to parse a JSON file
 const STACK_SIZE: usize = 10240;
 
+// mdns-sd service.
+const SERVICE_TYPE: &str = "_ascot";
+
 /// The `Ascot` server.
 pub struct AscotServer<E, F>
 where
@@ -39,7 +50,7 @@ where
     E: Debug,
 {
     // HTTP address.
-    http_address: IpAddr,
+    http_address: Ipv4Addr,
     // Server port.
     port: u16,
     // Scheme.
@@ -58,26 +69,20 @@ where
     E: Debug,
 {
     /// Creates a new [`AscotServer`] instance.
-    pub fn new(device: Device<E, F>) -> Self {
+    pub fn new(device: Device<E, F>, service_address: Ipv4Addr) -> Self {
         let configuration = Configuration {
             stack_size: STACK_SIZE,
             ..Default::default()
         };
 
         Self {
-            http_address: DEFAULT_HTTP_ADDRESS,
+            http_address: service_address,
             port: DEFAULT_SERVER_PORT,
             scheme: DEFAULT_SCHEME,
             well_known_uri: WELL_KNOWN_URI,
             configuration,
             device,
         }
-    }
-
-    /// Sets a new HTTP address.
-    pub fn http_address(mut self, http_address: IpAddr) -> Self {
-        self.http_address = http_address;
-        self
     }
 
     /// Sets server port.
@@ -98,20 +103,6 @@ where
         self
     }
 
-    /*/// Runs a service.
-    pub fn run_service(self, service: ServiceBuilder) -> Result<Self> {
-        // Add server properties.
-        let service = service
-            .port(self.port)
-            .property(("scheme", self.scheme))
-            .property(("path", self.well_known_uri));
-
-        // Run service.
-        Service::run(service)?;
-
-        Ok(self)
-    }*/
-
     /// Runs a smart home device on the server.
     pub fn run(self) -> anyhow::Result<()> {
         let mut server = EspHttpServer::new(&self.configuration)?;
@@ -120,60 +111,73 @@ where
             server.fn_handler("/", Method::Get, route.handler)?;
         }
 
+        let stack = Stack::new();
+
+        let (recv_buf, send_buf) = (
+            VecBufAccess::<NoopRawMutex, 1500>::new(),
+            VecBufAccess::<NoopRawMutex, 1500>::new(),
+        );
+
+        // Block the main thread to initialize the service.
+        // If everything goes well, keep going with the server execution.
+        block_on(Self::run_service::<Stack, _, _>(
+            &stack,
+            &recv_buf,
+            &send_buf,
+            SERVICE_TYPE,
+            self.http_address,
+        ))
+        .map_err(|e| anyhow::anyhow!("Error running the mdns-sd service: {}", e))?;
+
+        // Run the server endlessly.
         loop {
+            // Sleep for one second and then continue the execution.
             sleep(Duration::from_millis(1000));
         }
     }
-}
 
-/*pub(crate) fn run_server() -> anyhow::Result<()> {
-    let server_configuration = esp_idf_svc::http::server::Configuration {
-        stack_size: STACK_SIZE,
-        ..Default::default()
-    };
+    async fn run_service<T, RB, SB>(
+        stack: &T,
+        recv_buf: RB,
+        send_buf: SB,
+        our_name: &str,
+        our_ip: Ipv4Addr,
+    ) -> Result<(), MdnsIoError<T::Error>>
+    where
+        T: UdpBind,
+        RB: BufferAccess<[u8]>,
+        SB: BufferAccess<[u8]>,
+    {
+        // About to run an mDNS responder for our PC.
+        // It will be addressable using _ascot.local, so try to `ping _ascot.local`.
 
-    let mut server = EspHttpServer::new(&server_configuration)?;
+        let mut socket =
+            io::bind(stack, DEFAULT_SOCKET, Some(Ipv4Addr::UNSPECIFIED), Some(0)).await?;
 
-    server.fn_handler("/", Method::Get, |req| {
-        req.into_ok_response()?
-            .write_all(INDEX_HTML.as_bytes())
-            .map(|_| ())
-    })?;
+        let (recv, send) = socket.split();
 
-    server.fn_handler::<anyhow::Error, _>("/put", Method::Put, |mut req| {
-        #[derive(Deserialize)]
-        struct FormData<'a> {
-            first_name: &'a str,
-            age: u32,
-            birthplace: &'a str,
-        }
+        let host = Host {
+            hostname: our_name,
+            ipv4: our_ip,
+            ipv6: Ipv6Addr::UNSPECIFIED,
+            ttl: Ttl::from_secs(60),
+        };
 
-        let len = req.content_len().unwrap_or(0) as usize;
+        // A way to notify the mDNS responder that the data in `Host` had changed
+        // We don't use it in this example, because the data is hard-coded
+        let signal = Signal::new();
 
-        if len > MAX_LEN {
-            req.into_status_response(413)?
-                .write_all("Request too big".as_bytes())?;
-            return Ok(());
-        }
+        let mdns = io::Mdns::<NoopRawMutex, _, _, _, _>::new(
+            Some(Ipv4Addr::UNSPECIFIED),
+            Some(0),
+            recv,
+            send,
+            recv_buf,
+            send_buf,
+            |buf| thread_rng().fill_bytes(buf),
+            &signal,
+        );
 
-        let mut buf = vec![0; len];
-        req.read_exact(&mut buf)?;
-        let mut resp = req.into_ok_response()?;
-
-        if let Ok(form) = serde_json::from_slice::<FormData>(&buf) {
-            write!(
-                resp,
-                "Hello, {}-year-old {} from {}!",
-                form.age, form.first_name, form.birthplace
-            )?;
-        } else {
-            resp.write_all("JSON error".as_bytes())?;
-        }
-
-        Ok(())
-    })?;
-
-    loop {
-        sleep(Duration::from_millis(1000));
+        mdns.run(HostAnswersMdnsHandler::new(&host)).await
     }
-}*/
+}

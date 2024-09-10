@@ -4,11 +4,22 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+
+# Esp
+embedded-svc = "0.28"
+esp-idf-svc = "0.49.1"
+
+# Mdns-sd
+edge-mdns = { git = "https://github.com/ivmarkov/edge-net"}
+edge-nal = { git = "https://github.com/ivmarkov/edge-net"}
+edge-nal-std = { git = "https://github.com/ivmarkov/edge-net"}
+embassy-sync = "0.6"
+embassy-time= { version = "0.3.2", features = ["std", "generic-queue-8"] }
+futures-lite = "2.3.0"
+rand = "0.8.5"
+
+# Other dependencies
 ascot-library = { path = "../" }
 anyhow = "1"
-embedded-svc = { version = "0.28", default-features = false }
-esp-idf-svc = "0.49.0"
 heapless = "0.8.0"
 log = { version = "0.4", default-features = false }
-serde = { version = "1", default-features = false, features = ["derive"] }
-serde_json = { version = "1", default-features = false, features = ["alloc"] }

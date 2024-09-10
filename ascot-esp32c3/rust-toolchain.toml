@@ -1,6 +1,6 @@
 [toolchain]
 # A specific nightly version.
-channel    = "nightly-2024-04-17"
+channel    = "nightly"
 # Download Rust source code needed to recompile the `std` environment for
 # the `esp` target.
 components = ["rust-src"]

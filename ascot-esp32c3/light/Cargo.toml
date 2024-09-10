@@ -3,9 +3,17 @@ name = "light"
 version = "0.1.0"
 edition = "2021"
 
-[profile.release]
-# Optimize for binary size, but with loop vectorization.
-opt-level = "s"
+[dependencies]
+ascot-library = { version = "0.1.0", path = "../../" }
+ascot-esp32c3 = { version = "0.1.0", path = "../" }
+anyhow = "1"
+embedded-svc = "0.28"
+esp-idf-svc = "0.49.1"
+toml-cfg = "0.2.0"
+
+[build-dependencies]
+embuild  = "0.32.0"
+toml-cfg = "0.2.0"
 
 [profile.dev]
 # Enable debug symbols
@@ -13,17 +21,12 @@ debug = true
 # Optimize for binary size, but also turn off loop vectorization.
 opt-level = "z"
 
-[dependencies]
-ascot-library = { version = "0.1.0", path = "../../" }
-ascot-esp32c3 = { version = "0.1.0", path = "../" }
-anyhow = "1"
-embedded-svc = { version = "0.28", default-features = false }
-esp-idf-svc = "0.49.0"
-log = { version = "0.4", default-features = false }
-serde = { version = "1", default-features = false, features = ["derive"] }
-serde_json = { version = "1", default-features = false, features = ["alloc"] }
-toml-cfg = "0.2.0"
-
-[build-dependencies]
-embuild  = "0.32.0"
-toml-cfg = "0.2.0"
+[profile.release]
+codegen-units = 1 # LLVM can perform better optimizations using a single thread
+debug = 2
+debug-assertions = false
+incremental = false
+lto = 'fat'
+# Optimize for binary size, but with loop vectorization.
+opt-level = 's'
+overflow-checks = false

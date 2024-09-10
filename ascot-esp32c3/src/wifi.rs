@@ -1,3 +1,5 @@
+use core::net::Ipv4Addr;
+
 use anyhow::bail;
 
 use esp_idf_svc::{
@@ -9,16 +11,13 @@ use esp_idf_svc::{
 
 use log::info;
 
-// Wi-Fi channel, between 1 and 11
-//const CHANNEL: u8 = 11;
-
 pub fn connect_wifi(
     ssid: &'static str,
     password: &'static str,
     modem: impl peripheral::Peripheral<P = esp_idf_svc::hal::modem::Modem> + 'static,
     sys_loop: EspSystemEventLoop,
     nvs: EspDefaultNvsPartition,
-) -> anyhow::Result<EspWifi<'static>> {
+) -> anyhow::Result<(EspWifi<'static>, Ipv4Addr)> {
     if ssid.is_empty() {
         bail!("Missing Wi-Fi SSID")
     }
@@ -80,5 +79,5 @@ pub fn connect_wifi(
 
     info!("Wifi DHCP info: {:?}", ip_info);
 
-    Ok(esp_wifi)
+    Ok((esp_wifi, ip_info.ip))
 }
