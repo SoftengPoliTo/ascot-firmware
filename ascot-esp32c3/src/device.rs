@@ -19,7 +19,7 @@ const MAXIMUM_ELEMENTS: usize = 16;
 /// optionally, with every possible hazards associated with the handler.
 pub struct DeviceAction<E, F>
 where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
     E: Debug,
 {
     // Route and hazards.
@@ -82,7 +82,7 @@ where
 /// A general smart home device.
 pub struct Device<E, F>
 where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
     E: Debug,
 {
     // Kind.
@@ -95,7 +95,7 @@ where
 
 impl<E, F> DeviceSerializer for Device<E, F>
 where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
     E: Debug,
 {
     fn serialize_data(&self) -> DeviceData {
@@ -114,7 +114,7 @@ where
 
 impl<E, F> Device<E, F>
 where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
     E: Debug,
 {
     /// Creates a new [`Device`] instance.

@@ -22,6 +22,8 @@ use futures_lite::future::block_on;
 
 use rand::{thread_rng, RngCore};
 
+use ascot_library::route::RestKind;
+
 use crate::device::Device;
 
 // Default port.
@@ -46,7 +48,7 @@ const SERVICE_TYPE: &str = "_ascot";
 /// The `Ascot` server.
 pub struct AscotServer<E, F>
 where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
     E: Debug,
 {
     // HTTP address.
@@ -65,7 +67,7 @@ where
 
 impl<E, F> AscotServer<E, F>
 where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> Result<(), E> + Send + 'static,
+    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
     E: Debug,
 {
     /// Creates a new [`AscotServer`] instance.
@@ -108,7 +110,12 @@ where
         let mut server = EspHttpServer::new(&self.configuration)?;
 
         for route in self.device.routes_data.into_iter() {
-            server.fn_handler("/", Method::Get, route.handler)?;
+            let method = match route.route_hazards.route.kind() {
+                RestKind::Get => Method::Get,
+                RestKind::Post => Method::Post,
+                RestKind::Put => Method::Put,
+            };
+            server.fn_handler("/", method, route.handler)?;
         }
 
         let stack = Stack::new();
