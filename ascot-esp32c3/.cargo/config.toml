@@ -11,13 +11,11 @@ rustflags = ["--cfg", "espidf_time64", "-C", "default-linker-libraries"]
 [unstable]
 # Builds the `std` environment crate for the `esp` target.
 # The `panic_abort` crate is built as default behavior for the binary.
-build-std          = ["panic_abort", "std"]
-# Enables only the following `std` features for the `esp` binary.
-build-std-features = ["panic_immediate_abort"]
+build-std = ["panic_abort", "std"]
 
 [env]
 # Enables the esp-idf-sys "native" build feature (`cargo build --features native`) to build against ESP-IDF (v5.2.1)
-ESP_IDF_VERSION = { value = "tag:v5.2.1" }
+ESP_IDF_VERSION = { value = "tag:v5.2.2" }
 
 # These configurations will pick up your custom "sdkconfig.release", "sdkconfig.debug" or "sdkconfig.defaults[.*]" files
 # that you might put in the root of the project

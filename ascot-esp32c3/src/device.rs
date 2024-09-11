@@ -1,11 +1,9 @@
-use core::fmt::Debug;
-use core::marker::PhantomData;
-
 use ascot_library::device::{DeviceData, DeviceKind, DeviceSerializer};
 use ascot_library::hazards::{Hazard, Hazards};
 use ascot_library::route::{Route, RouteConfigs, RouteHazards};
 
 use esp_idf_svc::http::server::{EspHttpConnection, Request};
+use esp_idf_svc::io::EspIOError;
 
 use heapless::Vec;
 
@@ -15,33 +13,38 @@ const DEFAULT_MAIN_ROUTE: &str = "/device";
 // Maximum stack elements.
 const MAXIMUM_ELEMENTS: usize = 16;
 
+// Handler type
+type Handler = dyn for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
+    + Send
+    + 'static;
+
 /// A device action connects a server route with a device handler and,
 /// optionally, with every possible hazards associated with the handler.
-pub struct DeviceAction<E, F>
-where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
-    E: Debug,
-{
+pub struct DeviceAction {
     // Route and hazards.
     pub(crate) route_hazards: RouteHazards,
     // Handler.
-    pub(crate) handler: F,
-    // Handler error.
-    handler_error: PhantomData<E>,
+    pub(crate) handler: Box<Handler>,
 }
 
-impl<E, F> DeviceAction<E, F>
-where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
-    E: Debug,
-{
+impl DeviceAction {
     /// Creates a new [`DeviceAction`].
-    pub fn no_hazards(route: Route, function: F) -> Self {
+    pub fn no_hazards<F>(route: Route, function: F) -> Self
+    where
+        F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
+            + Send
+            + 'static,
+    {
         Self::init(route, function, Hazards::init())
     }
 
     /// Creates a new [`DeviceAction`] with a single [`Hazard`].
-    pub fn with_hazard(route: Route, function: F, hazard: Hazard) -> Self {
+    pub fn with_hazard<F>(route: Route, function: F, hazard: Hazard) -> Self
+    where
+        F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
+            + Send
+            + 'static,
+    {
         let mut hazards = Hazards::init();
         hazards.add(hazard);
 
@@ -49,7 +52,12 @@ where
     }
 
     /// Creates a new [`DeviceAction`] with [`Hazard`]s.
-    pub fn with_hazards(route: Route, function: F, input_hazards: &'static [Hazard]) -> Self {
+    pub fn with_hazards<F>(route: Route, function: F, input_hazards: &'static [Hazard]) -> Self
+    where
+        F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
+            + Send
+            + 'static,
+    {
         let mut hazards = Hazards::init();
         input_hazards.iter().for_each(|hazard| {
             hazards.add(*hazard);
@@ -70,34 +78,30 @@ where
             .all(|hazard| self.route_hazards.hazards.contains(*hazard))
     }
 
-    fn init(route: Route, function: F, hazards: Hazards) -> Self {
+    fn init<F>(route: Route, handler: F, hazards: Hazards) -> Self
+    where
+        F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
+            + Send
+            + 'static,
+    {
         Self {
             route_hazards: RouteHazards::new(route, hazards),
-            handler: function,
-            handler_error: PhantomData,
+            handler: Box::new(handler),
         }
     }
 }
 
 /// A general smart home device.
-pub struct Device<E, F>
-where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
-    E: Debug,
-{
+pub struct Device {
     // Kind.
     kind: DeviceKind,
     // Main device route.
     main_route: &'static str,
-    // All device routes with their hazards and hanlders.
-    pub(crate) routes_data: Vec<DeviceAction<E, F>, MAXIMUM_ELEMENTS>,
+    // All device routes with their hazards and handlers.
+    pub(crate) routes_data: Vec<DeviceAction, MAXIMUM_ELEMENTS>,
 }
 
-impl<E, F> DeviceSerializer for Device<E, F>
-where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
-    E: Debug,
-{
+impl DeviceSerializer for Device {
     fn serialize_data(&self) -> DeviceData {
         let mut route_configs = RouteConfigs::init();
         for route_data in self.routes_data.iter() {
@@ -112,11 +116,7 @@ where
     }
 }
 
-impl<E, F> Device<E, F>
-where
-    F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> anyhow::Result<(), E> + Send + 'static,
-    E: Debug,
-{
+impl Device {
     /// Creates a new [`Device`] instance.
     pub fn new(kind: DeviceKind) -> Self {
         Self {
@@ -133,8 +133,8 @@ where
     }
 
     /// Adds a [`DeviceAction`].
-    pub fn add_action(mut self, device_chainer: DeviceAction<E, F>) -> Self {
-        let _ = self.routes_data.push(device_chainer);
+    pub fn add_action(mut self, device_action: DeviceAction) -> Self {
+        let _ = self.routes_data.push(device_action);
         self
     }
 }

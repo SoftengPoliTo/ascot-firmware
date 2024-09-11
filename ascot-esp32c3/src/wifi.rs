@@ -2,82 +2,86 @@ use core::net::Ipv4Addr;
 
 use anyhow::bail;
 
-use esp_idf_svc::{
-    eventloop::EspSystemEventLoop,
-    hal::peripheral,
-    nvs::EspDefaultNvsPartition,
-    wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi},
-};
+use embedded_svc::wifi::{AuthMethod, ClientConfiguration, Configuration};
+
+use esp_idf_svc::hal::modem::Modem;
+use esp_idf_svc::hal::peripheral::Peripheral;
+use esp_idf_svc::hal::task::block_on;
+use esp_idf_svc::timer::EspTaskTimerService;
+use esp_idf_svc::wifi::{AsyncWifi, EspWifi};
+use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
 
 use log::info;
 
-pub fn connect_wifi(
-    ssid: &'static str,
-    password: &'static str,
-    modem: impl peripheral::Peripheral<P = esp_idf_svc::hal::modem::Modem> + 'static,
-    sys_loop: EspSystemEventLoop,
-    nvs: EspDefaultNvsPartition,
-) -> anyhow::Result<(EspWifi<'static>, Ipv4Addr)> {
-    if ssid.is_empty() {
-        bail!("Missing Wi-Fi SSID")
+pub struct Wifi {
+    pub ip: Ipv4Addr,
+    _wifi: AsyncWifi<EspWifi<'static>>,
+}
+
+impl Wifi {
+    pub fn connect_wifi(
+        ssid: &'static str,
+        password: &'static str,
+        modem: impl Peripheral<P = Modem> + 'static,
+    ) -> anyhow::Result<Self> {
+        if ssid.is_empty() {
+            bail!("Missing Wi-Fi SSID")
+        }
+
+        if password.is_empty() {
+            bail!("Missing Wifi password");
+        }
+
+        // Retrieve system loop (singleton)
+        let sys_loop = EspSystemEventLoop::take()?;
+        // Retrieve timer service (singleton)
+        let timer_service = EspTaskTimerService::new()?;
+        // Retrieve nvs partitions (singleton)
+        let nvs = EspDefaultNvsPartition::take()?;
+
+        let mut wifi = AsyncWifi::wrap(
+            EspWifi::new(modem, sys_loop.clone(), Some(nvs))?,
+            sys_loop,
+            timer_service,
+        )?;
+
+        block_on(Self::connect(&mut wifi, ssid, password))?;
+
+        let ip_info = wifi.wifi().sta_netif().get_ip_info()?;
+
+        info!("Wifi DHCP info: {:?}", ip_info);
+
+        Ok(Self {
+            ip: ip_info.ip,
+            _wifi: wifi,
+        })
     }
 
-    let auth_method = if password.is_empty() {
-        info!("Wifi password is empty");
-        AuthMethod::None
-    } else {
-        AuthMethod::WPA2Personal
-    };
+    async fn connect(
+        wifi: &mut AsyncWifi<EspWifi<'static>>,
+        ssid: &str,
+        password: &str,
+    ) -> anyhow::Result<()> {
+        let wifi_configuration: Configuration = Configuration::Client(ClientConfiguration {
+            ssid: ssid.try_into().unwrap(),
+            bssid: None,
+            auth_method: AuthMethod::WPA2Personal,
+            password: password.try_into().unwrap(),
+            channel: None,
+            ..Default::default()
+        });
 
-    let mut esp_wifi = EspWifi::new(modem, sys_loop.clone(), Some(nvs))?;
-    let mut wifi = BlockingWifi::wrap(&mut esp_wifi, sys_loop)?;
+        wifi.set_configuration(&wifi_configuration)?;
 
-    // Set default Wi-Fi configuration.
-    wifi.set_configuration(&Configuration::Client(ClientConfiguration::default()))?;
+        wifi.start().await?;
+        info!("Wifi started");
 
-    // Start Wi-Fi
-    wifi.start()?;
+        wifi.connect().await?;
+        info!("Wifi connected");
 
-    // Scan the network looking for all possible access points information.
-    let ap_infos = wifi.scan()?;
+        wifi.wait_netif_up().await?;
+        info!("Wifi netif up");
 
-    // Iter on all access points looking for the one associated with
-    // the input SSID.
-    let input_ap = ap_infos.into_iter().find(|a| a.ssid == ssid);
-
-    let channel = if let Some(input_ap) = input_ap {
-        info!("Found input SSID {} on channel {}", ssid, input_ap.channel);
-        Some(input_ap.channel)
-    } else {
-        info!(
-            "Input access point {} not found during the scanning process, an unknown channel will be used.",
-            ssid
-        );
-        None
-    };
-
-    // Configure Wi-FI
-    let wifi_configuration = Configuration::Client(ClientConfiguration {
-        ssid: ssid.try_into().unwrap(),
-        password: password.try_into().unwrap(),
-        auth_method,
-        channel,
-        ..Default::default()
-    });
-
-    // Sets the Wi-Fi configuration in order to connect to the access point.
-    wifi.set_configuration(&wifi_configuration)?;
-
-    // Connects to Wi-Fi
-    wifi.connect()?;
-
-    // DHCP lease phase
-    wifi.wait_netif_up()?;
-
-    // Gets the firmware IP information
-    let ip_info = wifi.wifi().sta_netif().get_ip_info()?;
-
-    info!("Wifi DHCP info: {:?}", ip_info);
-
-    Ok((esp_wifi, ip_info.ip))
+        Ok(())
+    }
 }
