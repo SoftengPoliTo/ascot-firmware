@@ -14,15 +14,8 @@ use crate::service::MdnsSdService;
 // Default port.
 const DEFAULT_SERVER_PORT: u16 = 3000;
 
-// Default scheme is `http`.
-const DEFAULT_SCHEME: &str = "http";
-
-// Well-known URI.
-// https://en.wikipedia.org/wiki/Well-known_URI
-//
-// Request to the server for well-known services or information are available
-// at URLs consistent well-known locations across servers.
-const WELL_KNOWN_URI: &str = "/.well-known/ascot";
+// Server stack size.
+const DEFAULT_STACK_SIZE: usize = 10240;
 
 /// The `Ascot` server.
 pub struct AscotServer {
@@ -30,22 +23,19 @@ pub struct AscotServer {
     http_address: Ipv4Addr,
     // Server port.
     port: u16,
-    // Scheme.
-    scheme: &'static str,
-    // Well-known URI.
-    well_known_uri: &'static str,
+    // Stack size
+    stack_size: usize,
     // Device.
     device: Device,
 }
 
 impl AscotServer {
     /// Creates a new [`AscotServer`] instance.
-    pub fn new(device: Device, service_address: Ipv4Addr) -> Self {
+    pub fn new(device: Device, http_address: Ipv4Addr) -> Self {
         Self {
-            http_address: service_address,
+            http_address,
             port: DEFAULT_SERVER_PORT,
-            scheme: DEFAULT_SCHEME,
-            well_known_uri: WELL_KNOWN_URI,
+            stack_size: DEFAULT_STACK_SIZE,
             device,
         }
     }
@@ -56,21 +46,19 @@ impl AscotServer {
         self
     }
 
-    /// Sets server scheme.
-    pub fn scheme(mut self, scheme: &'static str) -> Self {
-        self.scheme = scheme;
-        self
-    }
-
-    /// Sets well-known URI.
-    pub fn well_known_uri(mut self, well_known_uri: &'static str) -> Self {
-        self.well_known_uri = well_known_uri;
+    /// Sets server stack size.
+    pub fn stack_size(mut self, stack_size: usize) -> Self {
+        self.stack_size = stack_size;
         self
     }
 
     /// Runs a smart home device on the server.
     pub fn run(self) -> anyhow::Result<()> {
-        let mut server = EspHttpServer::new(&Configuration::default())?;
+        let mut server = EspHttpServer::new(&Configuration {
+            stack_size: self.stack_size,
+            http_port: self.port,
+            ..Default::default()
+        })?;
 
         for route in self.device.routes_data {
             let method = match route.route_hazards.route.kind() {
