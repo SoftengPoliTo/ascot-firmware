@@ -2,8 +2,9 @@ use ascot_library::device::{DeviceData, DeviceKind, DeviceSerializer};
 use ascot_library::hazards::{Hazard, Hazards};
 use ascot_library::route::{Route, RouteConfigs, RouteHazards};
 
-use esp_idf_svc::http::server::{EspHttpConnection, Request};
+use esp_idf_svc::http::server::{EspHttpConnection, Request, Response};
 use esp_idf_svc::io::EspIOError;
+use esp_idf_svc::io::Write;
 
 use heapless::Vec;
 
@@ -27,34 +28,55 @@ pub struct DeviceAction {
     pub(crate) handler: Box<Handler>,
 }
 
+pub struct BuildResponse<
+    R: for<'a, 'r> Fn(
+            Request<&'a mut EspHttpConnection<'r>>,
+        )
+            -> core::result::Result<Response<&'a mut EspHttpConnection<'r>>, EspIOError>
+        + Send
+        + 'static,
+>(pub R, pub &'static str);
+
 impl DeviceAction {
     /// Creates a new [`DeviceAction`].
-    pub fn no_hazards<F>(route: Route, function: F) -> Self
+    pub fn no_hazards<B, R>(route: Route, body: B, builder: BuildResponse<R>) -> Self
     where
-        F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
-            + Send
+        B: Fn() -> core::result::Result<(), EspIOError> + Send + 'static,
+        R: for<'a, 'r> Fn(
+                Request<&'a mut EspHttpConnection<'r>>,
+            ) -> core::result::Result<
+                Response<&'a mut EspHttpConnection<'r>>,
+                EspIOError,
+            > + Send
             + 'static,
     {
-        Self::init(route, function, Hazards::init())
+        Self::init(route, body, builder, Hazards::init())
     }
 
-    /// Creates a new [`DeviceAction`] with a single [`Hazard`].
-    pub fn with_hazard<F>(route: Route, function: F, hazard: Hazard) -> Self
+    /*/// Creates a new [`DeviceAction`] with a single [`Hazard`].
+    pub fn with_hazard<B, R>(route: Route, body: B, response: R, hazard: Hazard) -> Self
     where
-        F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
+        B: Fn() -> core::result::Result<(), EspIOError> + Send + 'static,
+        R: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
             + Send
             + 'static,
     {
         let mut hazards = Hazards::init();
         hazards.add(hazard);
 
-        Self::init(route, function, hazards)
+        Self::init(route, body, response, hazards)
     }
 
     /// Creates a new [`DeviceAction`] with [`Hazard`]s.
-    pub fn with_hazards<F>(route: Route, function: F, input_hazards: &'static [Hazard]) -> Self
+    pub fn with_hazards<B, R>(
+        route: Route,
+        body: B,
+        response: R,
+        input_hazards: &'static [Hazard],
+    ) -> Self
     where
-        F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
+        B: Fn() -> core::result::Result<(), EspIOError> + Send + 'static,
+        R: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
             + Send
             + 'static,
     {
@@ -63,7 +85,7 @@ impl DeviceAction {
             hazards.add(*hazard);
         });
 
-        Self::init(route, function, hazards)
+        Self::init(route, body, response, hazards)
     }
 
     /// Checks whether a [`DeviceAction`] misses a specific [`Hazard`].
@@ -76,17 +98,29 @@ impl DeviceAction {
         !hazards
             .iter()
             .all(|hazard| self.route_hazards.hazards.contains(*hazard))
-    }
+    }*/
 
-    fn init<F>(route: Route, handler: F, hazards: Hazards) -> Self
+    #[inline]
+    fn init<B, R>(route: Route, body: B, builder: BuildResponse<R>, hazards: Hazards) -> Self
     where
-        F: for<'r> Fn(Request<&mut EspHttpConnection<'r>>) -> core::result::Result<(), EspIOError>
-            + Send
+        B: Fn() -> core::result::Result<(), EspIOError> + Send + 'static,
+        R: for<'a, 'r> Fn(
+                Request<&'a mut EspHttpConnection<'r>>,
+            ) -> core::result::Result<
+                Response<&'a mut EspHttpConnection<'r>>,
+                EspIOError,
+            > + Send
             + 'static,
     {
         Self {
             route_hazards: RouteHazards::new(route, hazards),
-            handler: Box::new(handler),
+            handler: Box::new(move |req| {
+                // Run body.
+                body()?;
+
+                // Write response.
+                builder.0(req)?.write_all(builder.1.as_bytes())
+            }),
         }
     }
 }
