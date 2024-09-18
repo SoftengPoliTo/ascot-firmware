@@ -17,7 +17,6 @@ use ascot_esp32c3::wifi::Wifi;
 use esp_idf_svc::hal::delay::Ets;
 use esp_idf_svc::hal::gpio::PinDriver;
 use esp_idf_svc::hal::prelude::Peripherals;
-use esp_idf_svc::io::EspIOError;
 use esp_idf_svc::io::Write;
 use esp_idf_svc::log::EspLogger;
 
@@ -76,55 +75,40 @@ fn main() -> anyhow::Result<()> {
     // Configuration for the main page route.
     let main_page_config = Route::get("/").description("Main page.");
 
-    let main_page_action = DeviceAction::no_hazards(
-        main_page_config,
-        move |req| -> core::result::Result<(), EspIOError> {
-            req.into_ok_response()?.write_all(b"Main page!")?;
-
-            Ok(())
-        },
-    );
+    let main_page_action = DeviceAction::no_hazards(main_page_config, move |req| {
+        req.into_ok_response()?.write_all(b"Main page!")
+    });
 
     // Configuration for the `PUT` turn light on route.
     let light_on_config = Route::put("/on").description("Turn light on.");
 
     let temp_led_on = temp_led_main.clone();
-    let light_on_action = DeviceAction::no_hazards(
-        light_on_config,
-        move |req| -> core::result::Result<(), EspIOError> {
-            // Turn built-in led on.
-            temp_led_on.lock().unwrap().set_low().unwrap();
+    let light_on_action = DeviceAction::no_hazards(light_on_config, move |req| {
+        // Turn built-in led on.
+        temp_led_on.lock().unwrap().set_low().unwrap();
 
-            // Add a delay of 1ms
-            Ets::delay_ms(1u32);
+        // Add a delay of 1ms
+        Ets::delay_ms(1u32);
 
-            // Add a response
-            req.into_ok_response()?
-                .write_all(b"Turning led on went well!")?;
-
-            Ok(())
-        },
-    );
+        // Add a response
+        req.into_ok_response()?
+            .write_all(b"Turning led on went well!")
+    });
 
     // Configuration for the `PUT` turn light off route.
     let light_off_config = Route::put("/off").description("Turn light off.");
 
     let temp_led_off = temp_led_main.clone();
-    let light_off_action = DeviceAction::no_hazards(
-        light_off_config,
-        move |req| -> core::result::Result<(), EspIOError> {
-            // Turn built-in led off.
-            temp_led_off.lock().unwrap().set_high().unwrap();
+    let light_off_action = DeviceAction::no_hazards(light_off_config, move |req| {
+        // Turn built-in led off.
+        temp_led_off.lock().unwrap().set_high().unwrap();
 
-            // Add a delay of 1ms
-            Ets::delay_ms(1u32);
+        // Add a delay of 1ms
+        Ets::delay_ms(1u32);
 
-            req.into_ok_response()?
-                .write_all(b"Turning led off went well!")?;
-
-            Ok(())
-        },
-    );
+        req.into_ok_response()?
+            .write_all(b"Turning led off went well!")
+    });
 
     let device = Device::new(DeviceKind::Light)
         .add_action(main_page_action)
