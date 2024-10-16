@@ -9,56 +9,74 @@ pub enum ErrorKind {
     NotFoundAddress,
     /// Serialize/Deserialize error.
     Serialization,
-    /// `Ascot` library error.
+    /// An `Ascot` library error.
     AscotLibrary,
     /// Light error.
     Light,
     /// Fridge error.
     Fridge,
+    /// External error.
+    ///
+    /// An error caused by an external dependency.
+    External,
 }
 
 impl ErrorKind {
     pub(crate) const fn description(self) -> &'static str {
         match self {
-            ErrorKind::Service => "service error",
-            ErrorKind::NotFoundAddress => "not found address",
-            ErrorKind::Serialization => "serialization",
-            ErrorKind::AscotLibrary => "Ascot library error",
-            ErrorKind::Light => "light error",
-            ErrorKind::Fridge => "fridge error",
+            ErrorKind::Service => "Service",
+            ErrorKind::NotFoundAddress => "Not Found Address",
+            ErrorKind::Serialization => "Serialization",
+            ErrorKind::AscotLibrary => "Ascot Library",
+            ErrorKind::Light => "Light",
+            ErrorKind::Fridge => "Fridge",
+            ErrorKind::External => "External",
         }
     }
 }
 
 impl core::fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.description().fmt(f)
+        write!(f, "{}", self.description())
     }
 }
 
 /// Library error.
-#[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
-    info: Cow<'static, str>,
+    description: Cow<'static, str>,
 }
 
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.error().fmt(f)
+        self.format(f)
+    }
+}
+
+impl core::fmt::Debug for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.format(f)
     }
 }
 
 impl Error {
-    pub(crate) fn new(kind: ErrorKind, info: impl Into<Cow<'static, str>>) -> Self {
+    /// Creates an [`Error`] from an [`ErrorKind`] and a description.
+    pub fn new(kind: ErrorKind, description: impl Into<Cow<'static, str>>) -> Self {
         Self {
             kind,
-            info: info.into(),
+            description: description.into(),
         }
     }
 
-    pub(crate) fn error(&self) -> String {
-        format!("{}: {}", self.kind, self.info)
+    /// Creates an [`Error`] for [`ErrorKind::External`] with a specific
+    /// description.
+    pub fn external(description: impl Into<Cow<'static, str>>) -> Self {
+        Self::new(ErrorKind::External, description)
+    }
+
+    fn format(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "{}", self.kind)?;
+        write!(f, "Cause: {}", self.description)
     }
 }
 

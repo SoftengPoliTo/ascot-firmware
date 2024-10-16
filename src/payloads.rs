@@ -12,8 +12,6 @@ pub enum PayloadKind {
     Serial,
     /// Informative data on a device (i.e. JSON).
     Info,
-    /// Stream of data (bytes).
-    Stream,
 }
 
 /// Empty payload with only a description.
@@ -60,25 +58,5 @@ impl InfoPayload {
     /// Creates a [`InfoPayload`].
     pub const fn new(data: DeviceInfo) -> Self {
         Self { data }
-    }
-}
-
-/// Stream payload.
-pub struct StreamPayload<'a> {
-    // Stream type.
-    #[allow(dead_code)]
-    stream_type: (&'a str, &'a str),
-    // Stream headers.
-    #[allow(dead_code)]
-    headers: Option<&'a [(&'a str, &'a str)]>,
-}
-
-impl<'a> StreamPayload<'a> {
-    /// Creates a [`StreamPayload`].
-    pub const fn new(stream_type: (&'a str, &'a str)) -> Self {
-        Self {
-            stream_type,
-            headers: None,
-        }
     }
 }

@@ -1,8 +1,9 @@
 pub mod empty;
 pub mod info;
 pub mod serial;
+pub mod stream;
 
-use ascot_library::actions::{ActionError as AscotActionError, ActionErrorKind};
+use ascot_library::actions::ActionErrorKind;
 use ascot_library::hazards::{Hazard, Hazards};
 
 use ascot_library::route::{RestKind, Route, RouteHazards, RouteMode};
@@ -14,6 +15,8 @@ use axum::{
     response::{IntoResponse, Response},
     Router,
 };
+
+use serde::Serialize;
 
 #[rustfmt::skip]
 macro_rules! all_the_tuples {
@@ -40,33 +43,70 @@ macro_rules! all_the_tuples {
 
 pub(super) use all_the_tuples;
 
+#[derive(Serialize)]
+struct ErrorPayload {
+    kind: ActionErrorKind,
+    description: &'static str,
+    error: Option<String>,
+}
+
 /// An error which might arise during the execution of an action on a device.
-pub struct ActionError(AscotActionError);
+pub struct ActionError(ErrorPayload);
 
 impl ActionError {
     /// Creates a new [`ActionError`] with a specific [`ActionErrorKind`]
-    /// and a string slice as description for the error.
-    #[inline(always)]
-    pub fn from_str(kind: ActionErrorKind, description: &str) -> Self {
-        Self(AscotActionError::from_str(kind, description))
+    /// and an error description.
+    #[inline]
+    pub fn with_description(kind: ActionErrorKind, description: &'static str) -> Self {
+        Self(ErrorPayload {
+            kind,
+            description,
+            error: None,
+        })
     }
 
-    /// Creates an [`ActionError`] when invalid data is met.
-    #[inline(always)]
-    pub fn invalid_data(description: &str) -> Self {
-        Self(AscotActionError::invalid_data(description))
+    /// Creates a new [`ActionError`] with a specific [`ActionErrorKind`],
+    /// an error description, and the effective error.
+    #[inline]
+    pub fn with_description_error(
+        kind: ActionErrorKind,
+        description: &'static str,
+        error: impl std::error::Error,
+    ) -> Self {
+        Self(ErrorPayload {
+            kind,
+            description,
+            error: Some(error.to_string()),
+        })
     }
 
-    /// Creates an [`ActionError`] when an internal error occurs.
-    #[inline(always)]
-    pub fn internal(description: &str) -> Self {
-        Self(AscotActionError::internal(description))
+    /// Creates an [`ActionError`] for invalid data with a description.
+    #[inline]
+    pub fn invalid_data(description: &'static str) -> Self {
+        Self::with_description(ActionErrorKind::InvalidData, description)
     }
 
-    /// Adds more information about an error.
+    /// Creates an [`ActionError`] for invalid data with a description and
+    /// the effective error.
+    #[inline]
+    pub fn invalid_data_with_error(
+        description: &'static str,
+        error: impl std::error::Error,
+    ) -> Self {
+        Self::with_description_error(ActionErrorKind::InvalidData, description, error)
+    }
+
+    /// Creates an [`ActionError`] for an internal error with a description.
+    #[inline]
+    pub fn internal(description: &'static str) -> Self {
+        Self::with_description(ActionErrorKind::Internal, description)
+    }
+
+    /// Creates an [`ActionError`] for an internal error with a description and
+    /// the effective error.
     #[inline(always)]
-    pub fn info(self, info: &str) -> Self {
-        Self(self.0.info(info))
+    pub fn internal_with_error(description: &'static str, error: impl std::error::Error) -> Self {
+        Self::with_description_error(ActionErrorKind::Internal, description, error)
     }
 }
 
