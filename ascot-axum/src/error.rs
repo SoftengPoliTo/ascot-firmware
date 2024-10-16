@@ -9,12 +9,16 @@ pub enum ErrorKind {
     NotFoundAddress,
     /// Serialize/Deserialize error.
     Serialization,
-    /// `Ascot` library error.
+    /// An `Ascot` library error.
     AscotLibrary,
     /// Light error.
     Light,
     /// Fridge error.
     Fridge,
+    /// External error.
+    ///
+    /// An error caused by an external dependency.
+    External,
 }
 
 impl ErrorKind {
@@ -26,6 +30,7 @@ impl ErrorKind {
             ErrorKind::AscotLibrary => "Ascot library error",
             ErrorKind::Light => "light error",
             ErrorKind::Fridge => "fridge error",
+            ErrorKind::External => "external error",
         }
     }
 }
@@ -50,11 +55,18 @@ impl core::fmt::Display for Error {
 }
 
 impl Error {
-    pub(crate) fn new(kind: ErrorKind, info: impl Into<Cow<'static, str>>) -> Self {
+    /// Creates an [`Error`] passing a specific [`ErrorKind`] and a description.
+    pub fn new(kind: ErrorKind, info: impl Into<Cow<'static, str>>) -> Self {
         Self {
             kind,
             info: info.into(),
         }
+    }
+
+    /// Creates an [`Error`] for [`ErrorKind::External`] passing a specific
+    /// description.
+    pub fn external(info: impl Into<Cow<'static, str>>) -> Self {
+        Self::new(ErrorKind::External, info)
     }
 
     pub(crate) fn error(&self) -> String {

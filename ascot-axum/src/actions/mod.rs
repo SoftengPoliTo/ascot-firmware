@@ -1,6 +1,7 @@
 pub mod empty;
 pub mod info;
 pub mod serial;
+pub mod stream;
 
 use ascot_library::actions::{ActionError as AscotActionError, ActionErrorKind};
 use ascot_library::hazards::{Hazard, Hazards};
@@ -41,38 +42,71 @@ macro_rules! all_the_tuples {
 pub(super) use all_the_tuples;
 
 /// An error which might arise during the execution of an action on a device.
-pub struct ActionError(AscotActionError);
+#[derive(Debug)]
+pub struct ActionError(Response);
 
 impl ActionError {
     /// Creates a new [`ActionError`] with a specific [`ActionErrorKind`]
-    /// and a string slice as description for the error.
+    /// and a description for the error.
     #[inline(always)]
-    pub fn from_str(kind: ActionErrorKind, description: &str) -> Self {
-        Self(AscotActionError::from_str(kind, description))
+    pub fn from_kind_description(kind: ActionErrorKind, description: &str) -> Self {
+        Self(Self::response(AscotActionError::from_str(
+            kind,
+            description,
+        )))
     }
 
-    /// Creates an [`ActionError`] when invalid data is met.
+    /// Creates a new [`ActionError`] with a specific [`ActionErrorKind`],
+    /// a description for the error, and additional information about the error.
+    #[inline(always)]
+    pub fn from_kind_description_info(
+        kind: ActionErrorKind,
+        description: &str,
+        info: &str,
+    ) -> Self {
+        Self(Self::response(
+            AscotActionError::from_str(kind, description).info(info),
+        ))
+    }
+
+    /// Creates an [`ActionError`] with a description for the invalid data.
     #[inline(always)]
     pub fn invalid_data(description: &str) -> Self {
-        Self(AscotActionError::invalid_data(description))
+        Self(Self::response(AscotActionError::invalid_data(description)))
     }
 
-    /// Creates an [`ActionError`] when an internal error occurs.
+    /// Creates an [`ActionError`] with a description for the invalid data, and
+    /// additional information about the error.
+    #[inline(always)]
+    pub fn invalid_data_info(description: &str, info: &str) -> Self {
+        Self(Self::response(
+            AscotActionError::invalid_data(description).info(info),
+        ))
+    }
+
+    /// Creates an [`ActionError`] with a description for the internal error.
     #[inline(always)]
     pub fn internal(description: &str) -> Self {
-        Self(AscotActionError::internal(description))
+        Self(Self::response(AscotActionError::internal(description)))
     }
 
-    /// Adds more information about an error.
+    /// Creates an [`ActionError`] with a description for the internal error,
+    /// and additional information about the error.
     #[inline(always)]
-    pub fn info(self, info: &str) -> Self {
-        Self(self.0.info(info))
+    pub fn internal_info(description: &str, info: &str) -> Self {
+        Self(Self::response(
+            AscotActionError::internal(description).info(info),
+        ))
+    }
+
+    fn response<'a>(action_error: AscotActionError<'a>) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(action_error)).into_response()
     }
 }
 
 impl IntoResponse for ActionError {
     fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(self.0)).into_response()
+        self.0
     }
 }
 
