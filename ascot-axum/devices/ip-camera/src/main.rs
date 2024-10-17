@@ -1,3 +1,5 @@
+mod screenshot;
+
 use core::net::Ipv4Addr;
 
 use std::sync::Arc;
@@ -37,80 +39,9 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 
-fn make_requested_format(
-    frame_format_type: &str,
-    frame_format_option: Option<&str>,
-) -> Option<RequestedFormat<'static>> {
-    match frame_format_type {
-        "AbsoluteHighestResolution" => Some(RequestedFormat::new::<RgbFormat>(
-            RequestedFormatType::AbsoluteHighestResolution,
-        )),
-        "AbsoluteHighestFrameRate" => Some(RequestedFormat::new::<RgbFormat>(
-            RequestedFormatType::AbsoluteHighestFrameRate,
-        )),
-        "HighestResolution" => {
-            if let Some(fmtv) = frame_format_option {
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let resolution = Resolution::new(x, y);
-
-                Some(RequestedFormat::new::<RgbFormat>(
-                    RequestedFormatType::HighestResolution(resolution),
-                ))
-            } else {
-                None
-            }
-        }
-        "HighestFrameRate" => {
-            if let Some(fmtv) = frame_format_option {
-                let fps = fmtv.parse::<u32>().unwrap();
-
-                Some(RequestedFormat::new::<RgbFormat>(
-                    RequestedFormatType::HighestFrameRate(fps),
-                ))
-            } else {
-                None
-            }
-        }
-        "Exact" => {
-            if let Some(fmtv) = frame_format_option {
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let fps = values[2].parse::<u32>().unwrap();
-                let fourcc = values[3].parse::<FrameFormat>().unwrap();
-
-                let resolution = Resolution::new(x, y);
-                let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<RgbFormat>(
-                    RequestedFormatType::Exact(camera_format),
-                ))
-            } else {
-                None
-            }
-        }
-        "Closest" => {
-            if let Some(fmtv) = frame_format_option {
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let fps = values[2].parse::<u32>().unwrap();
-                let fourcc = values[3].parse::<FrameFormat>().unwrap();
-
-                let resolution = Resolution::new(x, y);
-                let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<RgbFormat>(
-                    RequestedFormatType::Closest(camera_format),
-                ))
-            } else {
-                None
-            }
-        }
-        // Random camera format
-        "None" | _ => Some(RequestedFormat::new::<RgbFormat>(RequestedFormatType::None)),
-    }
-}
+use crate::screenshot::{
+    screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_none,
+};
 
 #[inline(always)]
 fn camera_error(error: String) -> DeviceError {
@@ -235,55 +166,6 @@ async fn camera_data(Path(camera_index): Path<u32>) -> Result<DevicePayload, Dev
         controls,
         frame_formats,
     })
-}
-
-#[derive(Deserialize)]
-struct CameraInputs {
-    camera_index: u32,
-    frame_format_type: String,
-    frame_format_option: Option<String>,
-}
-
-async fn camera_screenshot(Json(inputs): Json<CameraInputs>) -> Result<DevicePayload, DeviceError> {
-    // Camera frame format.
-    //let requested_format =
-    //    make_requested_format(inputs.frame_format_type, inputs.frame_format_option).unwrap();
-
-    let camera_index = inputs.camera_index;
-
-    // Create camera
-    let mut camera = Camera::new(
-        CameraIndex::Index(camera_index),
-        RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
-    )
-    .map_err(|e| camera_error(format!("Error in retrieving camera {camera_index}: {e}")))?;
-
-    // Open camera stream.
-    camera
-        .open_stream()
-        .map_err(|e| camera_error(format!("Error in opening a stream for {camera_index}: {e}")))?;
-
-    // Retrieve camera frame.
-    let frame = camera
-        .frame()
-        .map_err(|e| camera_error(format!("Error in getting a frame for {camera_index}: {e}")))?;
-
-    // Stop camera stream.
-    camera.stop_stream().map_err(|e| {
-        camera_error(format!(
-            "Error in stopping a stream for {camera_index}: {e}"
-        ))
-    })?;
-
-    info!("Capture camera screenshot of size {}", frame.buffer().len());
-
-    // Decode a frame
-    let decoded = frame
-        .decode_image::<RgbFormat>()
-        .map_err(|e| camera_error(format!("Error in decoding a frame for {camera_index}: {e}")))?;
-    info!("Decoded frame of size {}", decoded.len());
-
-    Ok(DevicePayload::empty())
 }
 
 /*fn camera_stream(
@@ -418,10 +300,24 @@ async fn main() -> Result<(), Error> {
         camera_data,
     );
 
-    // Action to show screenshot from a camera.
-    let camera_screenshot_action = DeviceAction::no_hazards(
-        Route::post("/screenshot").description("Screenshot from a camera."),
-        camera_screenshot,
+    // Action to view screenshot with no format.
+    let camera_screenshot_none_action = DeviceAction::no_hazards(
+        Route::post("/screenshot/none").description("Screenshot from a camera with no format."),
+        screenshot_none,
+    );
+
+    // Action to view screenshot with absolute resolution.
+    let camera_screenshot_absolute_resolution_action = DeviceAction::no_hazards(
+        Route::post("/screenshot/absolute-resolution")
+            .description("Screenshot from a camera with absolute resolution."),
+        screenshot_absolute_resolution,
+    );
+
+    // Action to view screenshot with absolute framerate.
+    let camera_screenshot_absolute_framerate_action = DeviceAction::no_hazards(
+        Route::post("/screenshot/absolute-framerate")
+            .description("Screenshot from a camera with absolute framerate."),
+        screenshot_absolute_framerate,
     );
 
     // A camera device which is going to be run on the server.
@@ -429,7 +325,9 @@ async fn main() -> Result<(), Error> {
         .main_route("/camera")
         .add_action(view_cameras_action)
         .add_action(camera_data_action)
-        .add_action(camera_screenshot_action);
+        .add_action(camera_screenshot_none_action)
+        .add_action(camera_screenshot_absolute_resolution_action)
+        .add_action(camera_screenshot_absolute_framerate_action);
 
     // Run a discovery service and the device on the server.
     AscotServer::new(device)
