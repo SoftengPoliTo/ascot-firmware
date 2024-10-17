@@ -28,38 +28,6 @@ use crate::camera_error;
     frame_format_option: Option,
 ) -> Option<RequestedFormat<'static>> {
     match frame_format_type {
-        "AboluteHighestResolution" => Some(RequestedFormat::new::<RgbFormat>(
-            RequestedFormatType::AbsoluteHighestResolution,
-        )),
-        "AbsoluteHighestFrameRate" => Some(RequestedFormat::new::<RgbFormat>(
-            RequestedFormatType::AbsoluteHighestFrameRate,
-        )),
-        "HighestResolution" => {
-            if let Some(fmtv) = frame_format_option {
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let resolution = Resolution::new(x, y);
-
-                Some(RequestedFormat::new::<RgbFormat>(
-                    RequestedFormatType::HighestResolution(resolution),
-                ))
-            } else {
-                None
-            }
-        }
-        "HighestFrameRate" => {
-            if let Some(fmtv) = frame_format_option {
-                let fps = fmtv.parse::<u32>().unwrap();
-
-                Some(RequestedFormat::new::<RgbFormat>(
-                    RequestedFormatType::HighestFrameRate(fps),
-                ))
-            } else {
-                None
-            }
-        }
-        "Exact" => {
             if let Some(fmtv) = frame_format_option {
                 let values = fmtv.split(",").collect::<Vec<&str>>();
                 let x = values[0].parse::<u32>().unwrap();
@@ -93,8 +61,6 @@ use crate::camera_error;
                 None
             }
         }
-        // Random camera format
-        "None" | _ => Some(RequestedFormat::new::<RgbFormat>(RequestedFormatType::None)),
     }
 }*/
 
@@ -163,5 +129,84 @@ pub(crate) async fn screenshot_absolute_framerate(
     run_camera_screenshot(
         input.camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
+    )
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CameraResolution {
+    camera_index: u32,
+    x: u32,
+    y: u32,
+}
+
+pub(crate) async fn screenshot_highest_resolution(
+    Json(inputs): Json<CameraResolution>,
+) -> Result<DevicePayload, DeviceError> {
+    let resolution = Resolution::new(inputs.x, inputs.y);
+
+    run_camera_screenshot(
+        inputs.camera_index,
+        RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(resolution)),
+    )
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CameraFramerate {
+    camera_index: u32,
+    fps: u32,
+}
+
+pub(crate) async fn screenshot_highest_framerate(
+    Json(inputs): Json<CameraFramerate>,
+) -> Result<DevicePayload, DeviceError> {
+    run_camera_screenshot(
+        inputs.camera_index,
+        RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestFrameRate(inputs.fps)),
+    )
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CameraInputs {
+    camera_index: u32,
+    x: u32,
+    y: u32,
+    fps: u32,
+    fourcc: String,
+}
+
+#[inline]
+fn camera_format(inputs: CameraInputs) -> Result<CameraFormat, DeviceError> {
+    let fourcc = inputs.fourcc.parse::<FrameFormat>().map_err(|e| {
+        camera_error(format!(
+            "Wrong fourcc value for camera {}: {e}",
+            inputs.camera_index
+        ))
+    })?;
+    let resolution = Resolution::new(inputs.x, inputs.y);
+    let camera_format = CameraFormat::new(resolution, fourcc, inputs.fps);
+    Ok(camera_format)
+}
+
+pub(crate) async fn screenshot_exact(
+    Json(inputs): Json<CameraInputs>,
+) -> Result<DevicePayload, DeviceError> {
+    let camera_index = inputs.camera_index;
+    let camera_format = camera_format(inputs)?;
+
+    run_camera_screenshot(
+        camera_index,
+        RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(camera_format)),
+    )
+}
+
+pub(crate) async fn screenshot_closest(
+    Json(inputs): Json<CameraInputs>,
+) -> Result<DevicePayload, DeviceError> {
+    let camera_index = inputs.camera_index;
+    let camera_format = camera_format(inputs)?;
+
+    run_camera_screenshot(
+        camera_index,
+        RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(camera_format)),
     )
 }
