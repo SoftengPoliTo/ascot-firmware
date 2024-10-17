@@ -40,7 +40,8 @@ use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 
 use crate::screenshot::{
-    screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_none,
+    screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_closest,
+    screenshot_exact, screenshot_highest_framerate, screenshot_highest_resolution, screenshot_none,
 };
 
 #[inline(always)]
@@ -301,23 +302,50 @@ async fn main() -> Result<(), Error> {
     );
 
     // Action to view screenshot with no format.
-    let camera_screenshot_none_action = DeviceAction::no_hazards(
+    let screenshot_none_action = DeviceAction::no_hazards(
         Route::post("/screenshot/none").description("Screenshot from a camera with no format."),
         screenshot_none,
     );
 
     // Action to view screenshot with absolute resolution.
-    let camera_screenshot_absolute_resolution_action = DeviceAction::no_hazards(
+    let screenshot_absolute_resolution_action = DeviceAction::no_hazards(
         Route::post("/screenshot/absolute-resolution")
             .description("Screenshot from a camera with absolute resolution."),
         screenshot_absolute_resolution,
     );
 
     // Action to view screenshot with absolute framerate.
-    let camera_screenshot_absolute_framerate_action = DeviceAction::no_hazards(
+    let screenshot_absolute_framerate_action = DeviceAction::no_hazards(
         Route::post("/screenshot/absolute-framerate")
             .description("Screenshot from a camera with absolute framerate."),
         screenshot_absolute_framerate,
+    );
+
+    // Action to view screenshot with highest resolution.
+    let screenshot_highest_resolution_action = DeviceAction::no_hazards(
+        Route::post("/screenshot/highest-resolution")
+            .description("Screenshot from a camera with highest resolution."),
+        screenshot_highest_resolution,
+    );
+
+    // Action to view screenshot with highest framerate.
+    let screenshot_highest_framerate_action = DeviceAction::no_hazards(
+        Route::post("/screenshot/highest-framerate")
+            .description("Screenshot from a camera with highest framerate."),
+        screenshot_highest_framerate,
+    );
+
+    // Action to view screenshot with exact approach.
+    let screenshot_exact_action = DeviceAction::no_hazards(
+        Route::post("/screenshot/exact").description("Screenshot from a camera with exact type."),
+        screenshot_exact,
+    );
+
+    // Action to view screenshot with closest type.
+    let screenshot_closest_action = DeviceAction::no_hazards(
+        Route::post("/screenshot/closest")
+            .description("Screenshot from a camera with closest type."),
+        screenshot_closest,
     );
 
     // A camera device which is going to be run on the server.
@@ -325,9 +353,13 @@ async fn main() -> Result<(), Error> {
         .main_route("/camera")
         .add_action(view_cameras_action)
         .add_action(camera_data_action)
-        .add_action(camera_screenshot_none_action)
-        .add_action(camera_screenshot_absolute_resolution_action)
-        .add_action(camera_screenshot_absolute_framerate_action);
+        .add_action(screenshot_none_action)
+        .add_action(screenshot_absolute_resolution_action)
+        .add_action(screenshot_absolute_framerate_action)
+        .add_action(screenshot_highest_resolution_action)
+        .add_action(screenshot_highest_framerate_action)
+        .add_action(screenshot_exact_action)
+        .add_action(screenshot_closest_action);
 
     // Run a discovery service and the device on the server.
     AscotServer::new(device)
