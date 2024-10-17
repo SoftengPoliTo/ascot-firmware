@@ -24,10 +24,10 @@ use nokhwa::{
     pixel_format::{RgbAFormat, RgbFormat},
     query,
     utils::{
-        frame_formats, yuyv422_predicted_size, ApiBackend, CameraFormat, CameraIndex, FrameFormat,
-        RequestedFormat, RequestedFormatType, Resolution,
+        frame_formats, yuyv422_predicted_size, ApiBackend, CameraFormat, CameraIndex, CameraInfo,
+        FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
     },
-    Buffer, CallbackCamera, Camera,
+    Buffer, Camera, NokhwaError,
 };
 
 // Serde library.
@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 
-#[derive(Clone)]
+/*#[derive(Clone)]
 struct DeviceState(Arc<ApiBackend>);
 
 impl DeviceState {
@@ -58,7 +58,7 @@ impl core::ops::DerefMut for DeviceState {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
-}
+}*/
 
 fn make_requested_format(
     frame_format_type: &str,
@@ -136,31 +136,40 @@ fn make_requested_format(
     }
 }
 
-#[derive(Serialize)]
-struct ViewCamerasResponse {
-    number_of_cameras: u8,
-    cameras: Vec<String>,
+#[inline(always)]
+fn camera_error(error: String) -> DeviceError {
+    DeviceError::from_string(DeviceErrorKind::Wrong, error)
 }
 
-async fn view_available_cameras(
-    Extension(state): Extension<DeviceState>,
-) -> Result<DevicePayload, DeviceError> {
-    // Retrieve cameras
-    let cameras = query(*(state.0)).unwrap();
+#[derive(Serialize)]
+struct ViewCamerasResponse {
+    #[serde(rename = "number-of-cameras")]
+    number_of_cameras: u8,
+    cameras: Vec<CameraInfo>,
+}
 
-    info!("There are {} available cameras.", cameras.len());
+async fn view_available_cameras() -> Result<DevicePayload, DeviceError> {
+    // Retrieve camera backend
+    let camera_backend = native_api_backend().ok_or(DeviceError::from_str(
+        DeviceErrorKind::Wrong,
+        "No camera backend found",
+    ))?;
 
-    let cameras = cameras
-        .into_iter()
-        .map(|camera| {
-            let camera = camera.to_string();
-            info!("{camera}");
-            camera
-        })
-        .collect::<Vec<String>>();
+    // Retrieve all cameras present on a system
+    let cameras =
+        query(camera_backend).map_err(|e| camera_error(format!("No cameras found: {e}")))?;
+
+    // Number of cameras
+    let camera_len = cameras.len() as u8;
+
+    info!("There are {} available cameras.", camera_len);
+
+    for camera in &cameras {
+        info!("{camera}");
+    }
 
     DevicePayload::new(ViewCamerasResponse {
-        number_of_cameras: cameras.len() as u8,
+        number_of_cameras: camera_len,
         cameras,
     })
 }
@@ -169,6 +178,19 @@ async fn view_available_cameras(
 struct CameraDataResponse {
     camera_index: u32,
     controls: Vec<String>,
+    frame_formats: Vec<CameraFrameFormat>,
+}
+
+#[derive(Serialize)]
+struct CameraFrameFormat {
+    description: String,
+    frame_data: Vec<FrameData>,
+}
+
+#[derive(Serialize)]
+struct FrameData {
+    resolution: String,
+    fps: String,
 }
 
 async fn camera_data(Path(camera_index): Path<u32>) -> Result<DevicePayload, DeviceError> {
@@ -179,10 +201,9 @@ async fn camera_data(Path(camera_index): Path<u32>) -> Result<DevicePayload, Dev
     ) {
         Ok(camera) => camera,
         Err(e) => {
-            return Err(DeviceError::from_string(
-                DeviceErrorKind::Wrong,
-                format!("Error in retrieving camera {camera_index}: {e}"),
-            ))
+            return Err(camera_error(format!(
+                "Error in retrieving camera {camera_index}: {e}"
+            )))
         }
     };
 
@@ -190,10 +211,9 @@ async fn camera_data(Path(camera_index): Path<u32>) -> Result<DevicePayload, Dev
     let controls = match camera.camera_controls() {
         Ok(controls) => controls,
         Err(e) => {
-            return Err(DeviceError::from_string(
-                DeviceErrorKind::Wrong,
-                format!("Error in retrieving controls for camera {camera_index}: {e}"),
-            ))
+            return Err(camera_error(format!(
+                "Error in retrieving controls for camera {camera_index}: {e}"
+            )))
         }
     };
 
@@ -208,69 +228,49 @@ async fn camera_data(Path(camera_index): Path<u32>) -> Result<DevicePayload, Dev
         })
         .collect::<Vec<String>>();
 
+    // Iterate over frame formats.
+    let frame_formats = frame_formats()
+        .into_iter()
+        .filter_map(|ffmt| {
+            // Among the frame formats, save the ones compatible with the camera
+            if let Ok(compatible) = camera.compatible_list_by_resolution(*ffmt) {
+                let description = ffmt.to_string();
+                info!("{description}:");
+
+                let mut formats = compatible
+                    .into_iter()
+                    .map(|(resolution, fps)| (resolution, fps))
+                    .collect::<Vec<(Resolution, Vec<u32>)>>();
+
+                // Sort formats by name
+                formats.sort_by(|a, b| a.0.cmp(&b.0));
+
+                // Show sorted formats.
+                let frame_data = formats
+                    .into_iter()
+                    .map(|(resolution, fps)| {
+                        let resolution = resolution.to_string();
+                        let fps = format!("{fps:?}");
+                        info!(" - {resolution}: {fps}");
+                        FrameData { resolution, fps }
+                    })
+                    .collect::<Vec<FrameData>>();
+
+                Some(CameraFrameFormat {
+                    description,
+                    frame_data,
+                })
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<CameraFrameFormat>>();
+
     DevicePayload::new(CameraDataResponse {
         camera_index,
         controls,
+        frame_formats,
     })
-}
-
-fn camera_print_controls(camera: &Camera) {
-    // Get controls for a camera
-    let ctrls = camera.camera_controls().unwrap();
-    // Get camera index
-    let index = camera.index();
-    info!("Controls for camera {index}");
-    // Iterate over controls
-    for ctrl in ctrls {
-        info!("{ctrl}")
-    }
-}
-
-fn camera_compatible_frame_formats(camera: &mut Camera) {
-    // Iterate over frame formats.
-    for ffmt in frame_formats() {
-        // Among the frame formats, save the ones compatible with the camera
-        if let Ok(compatible) = camera.compatible_list_by_resolution(*ffmt) {
-            info!("{ffmt}:");
-            let mut formats = Vec::new();
-            // Save frame formats resolutions and fps in a vector
-            for (resolution, fps) in compatible {
-                formats.push((resolution, fps));
-            }
-            // Sort formats by name
-            formats.sort_by(|a, b| a.0.cmp(&b.0));
-            // Show sorted formats.
-            for fmt in formats {
-                let (resolution, res) = fmt;
-                info!(" - {resolution}: {res:?}")
-            }
-        }
-    }
-}
-
-fn view_camera_properties(camera_index: CameraIndex) {
-    // Create camera
-    let mut camera = Camera::new(
-        camera_index,
-        RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
-    )
-    .unwrap();
-    // Print camera controls
-    camera_print_controls(&camera);
-    // Print camera compatible frame formats
-    camera_compatible_frame_formats(&mut camera);
-}
-
-fn view_camera_properties_as_index(index: u32) {
-    info!("Camera properties using a numeric index");
-    let camera_index = CameraIndex::Index(index);
-    view_camera_properties(camera_index);
-}
-
-fn view_camera_properties_as_string(name: &str) {
-    info!("Camera properties using a string");
-    let camera_index = CameraIndex::String(name.into());
-    view_camera_properties(camera_index);
 }
 
 fn camera_stream(
@@ -349,24 +349,6 @@ fn camera_screenshot(
     decoded.save(save_path).unwrap();
 }
 
-/*fn nokhwa_main() {
-    // View available cameras.
-    //view_available_cameras();
-    // See camera properties passing a numeric index.
-    //view_camera_properties_as_index(0);
-    // See camera properties passing the camera name.
-    //view_camera_properties_as_string("0");
-    // Take a camera screenshot.
-    /*camera_screenshot(
-        "0",
-        "AbsoluteHighestResolution",
-        None,
-        Path::new("/tmp/save.png"),
-    );*/
-    // Run camera stream.
-    //camera_stream("0", "None", None, true);
-}*/
-
 async fn show_cameras_info(//Extension(state): Extension<CameraState>,
 ) {
     info!("Start");
@@ -439,23 +421,26 @@ async fn main() -> Result<(), Error> {
         }
     });
 
-    // Retrieve camera backend
-    let backend = native_api_backend().unwrap();
-
     // Command line parser.
     let cli = Cli::parse();
 
-    // Configuration for `GET` route to see cameras..
-    let view_cameras_config = Route::get("/view-all").description("View all cameras.");
+    // Action to view all available cameras.
+    /*let view_cameras = DeviceAction::no_hazards(
+        Route::get("/view-all").description("View all cameras."),
+        view_available_cameras,
+    );*/
+
+    // Action to view the data of a camera.
+    let view_camera_data = DeviceAction::no_hazards(
+        Route::get("/:camera_index").description("View camera data."),
+        camera_data,
+    );
 
     // A camera device which is going to be run on the server.
-    let device = Device::new(DeviceKind::Camera)
+    let device = Device::unknown()
         .main_route("/camera")
-        .add_action(DeviceAction::no_hazards(
-            view_cameras_config,
-            view_available_cameras,
-        ))
-        .state(DeviceState::new(backend));
+        //.add_action(view_cameras)
+        .add_action(view_camera_data);
 
     // Run a discovery service and the device on the server.
     AscotServer::new(device)
