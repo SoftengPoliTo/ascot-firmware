@@ -23,47 +23,6 @@ use tracing::info;
 
 use crate::camera_error;
 
-/*fn make_requested_format(
-    frame_format_type: RequestedFormatType,
-    frame_format_option: Option,
-) -> Option<RequestedFormat<'static>> {
-    match frame_format_type {
-            if let Some(fmtv) = frame_format_option {
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let fps = values[2].parse::<u32>().unwrap();
-                let fourcc = values[3].parse::<FrameFormat>().unwrap();
-
-                let resolution = Resolution::new(x, y);
-                let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<RgbFormat>(
-                    RequestedFormatType::Exact(camera_format),
-                ))
-            } else {
-                None
-            }
-        }
-        "Closest" => {
-            if let Some(fmtv) = frame_format_option {
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let fps = values[2].parse::<u32>().unwrap();
-                let fourcc = values[3].parse::<FrameFormat>().unwrap();
-
-                let resolution = Resolution::new(x, y);
-                let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<RgbFormat>(
-                    RequestedFormatType::Closest(camera_format),
-                ))
-            } else {
-                None
-            }
-        }
-    }
-}*/
-
 fn run_camera_screenshot(
     camera_index: u32,
     format: RequestedFormat,
@@ -175,7 +134,7 @@ pub(crate) struct CameraInputs {
 }
 
 #[inline]
-fn camera_format(inputs: CameraInputs) -> Result<CameraFormat, DeviceError> {
+fn camera_format(inputs: CameraInputs) -> Result<(u32, CameraFormat), DeviceError> {
     let fourcc = inputs.fourcc.parse::<FrameFormat>().map_err(|e| {
         camera_error(format!(
             "Wrong fourcc value for camera {}: {e}",
@@ -184,14 +143,13 @@ fn camera_format(inputs: CameraInputs) -> Result<CameraFormat, DeviceError> {
     })?;
     let resolution = Resolution::new(inputs.x, inputs.y);
     let camera_format = CameraFormat::new(resolution, fourcc, inputs.fps);
-    Ok(camera_format)
+    Ok((inputs.camera_index, camera_format))
 }
 
 pub(crate) async fn screenshot_exact(
     Json(inputs): Json<CameraInputs>,
 ) -> Result<DevicePayload, DeviceError> {
-    let camera_index = inputs.camera_index;
-    let camera_format = camera_format(inputs)?;
+    let (camera_index, camera_format) = camera_format(inputs)?;
 
     run_camera_screenshot(
         camera_index,
@@ -202,8 +160,7 @@ pub(crate) async fn screenshot_exact(
 pub(crate) async fn screenshot_closest(
     Json(inputs): Json<CameraInputs>,
 ) -> Result<DevicePayload, DeviceError> {
-    let camera_index = inputs.camera_index;
-    let camera_format = camera_format(inputs)?;
+    let (camera_index, camera_format) = camera_format(inputs)?;
 
     run_camera_screenshot(
         camera_index,
