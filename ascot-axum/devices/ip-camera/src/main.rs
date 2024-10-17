@@ -303,47 +303,47 @@ async fn main() -> Result<(), Error> {
 
     // Action to view screenshot with no format.
     let screenshot_none_action = DeviceAction::no_hazards(
-        Route::post("/screenshot/none").description("Screenshot from a camera with no format."),
+        Route::post("/screenshot-none").description("Screenshot from a camera with no format."),
         screenshot_none,
     );
 
     // Action to view screenshot with absolute resolution.
     let screenshot_absolute_resolution_action = DeviceAction::no_hazards(
-        Route::post("/screenshot/absolute-resolution")
+        Route::post("/screenshot-absolute-resolution")
             .description("Screenshot from a camera with absolute resolution."),
         screenshot_absolute_resolution,
     );
 
     // Action to view screenshot with absolute framerate.
     let screenshot_absolute_framerate_action = DeviceAction::no_hazards(
-        Route::post("/screenshot/absolute-framerate")
+        Route::post("/screenshot-absolute-framerate")
             .description("Screenshot from a camera with absolute framerate."),
         screenshot_absolute_framerate,
     );
 
     // Action to view screenshot with highest resolution.
     let screenshot_highest_resolution_action = DeviceAction::no_hazards(
-        Route::post("/screenshot/highest-resolution")
+        Route::post("/screenshot-highest-resolution")
             .description("Screenshot from a camera with highest resolution."),
         screenshot_highest_resolution,
     );
 
     // Action to view screenshot with highest framerate.
     let screenshot_highest_framerate_action = DeviceAction::no_hazards(
-        Route::post("/screenshot/highest-framerate")
+        Route::post("/screenshot-highest-framerate")
             .description("Screenshot from a camera with highest framerate."),
         screenshot_highest_framerate,
     );
 
     // Action to view screenshot with exact approach.
     let screenshot_exact_action = DeviceAction::no_hazards(
-        Route::post("/screenshot/exact").description("Screenshot from a camera with exact type."),
+        Route::post("/screenshot-exact").description("Screenshot from a camera with exact type."),
         screenshot_exact,
     );
 
     // Action to view screenshot with closest type.
     let screenshot_closest_action = DeviceAction::no_hazards(
-        Route::post("/screenshot/closest")
+        Route::post("/screenshot-closest")
             .description("Screenshot from a camera with closest type."),
         screenshot_closest,
     );
