@@ -15,7 +15,7 @@ use ascot_library::input::Input;
 use ascot_library::route::Route;
 
 // Ascot axum device.
-use ascot_axum::device::{DeviceAction, DeviceError, EmptyPayload, SerialPayload};
+use ascot_axum::actions::{ActionError, EmptyAction, EmptyPayload, SerialAction, SerialPayload};
 use ascot_axum::devices::light::Light;
 use ascot_axum::error::Error;
 use ascot_axum::extract::{Extension, Json};
@@ -71,7 +71,7 @@ struct Inputs {
 async fn turn_light_on(
     Extension(state): Extension<DeviceState>,
     Json(inputs): Json<Inputs>,
-) -> Result<SerialPayload<LightOnResponse>, DeviceError> {
+) -> Result<SerialPayload<LightOnResponse>, ActionError> {
     let mut light = state.lock().await;
     light.turn_light_on(inputs.brightness, inputs.save_energy);
 
@@ -83,12 +83,12 @@ async fn turn_light_on(
 
 async fn turn_light_off(
     Extension(state): Extension<DeviceState>,
-) -> Result<EmptyPayload, DeviceError> {
+) -> Result<EmptyPayload, ActionError> {
     state.lock().await.turn_light_off();
     Ok(EmptyPayload::new("Turn light off worked perfectly"))
 }
 
-async fn toggle(Extension(state): Extension<DeviceState>) -> Result<EmptyPayload, DeviceError> {
+async fn toggle(Extension(state): Extension<DeviceState>) -> Result<EmptyPayload, ActionError> {
     state.lock().await.toggle();
     Ok(EmptyPayload::new("Toggle worked perfectly"))
 }
@@ -148,11 +148,11 @@ async fn main() -> Result<(), Error> {
 
     // A light device which is going to be run on the server.
     let device = Light::new(
-        DeviceAction::with_hazard(light_on_config, turn_light_on, Hazard::FireHazard),
-        DeviceAction::no_hazards(light_off_config, turn_light_off),
+        SerialAction::with_hazard(light_on_config, turn_light_on, Hazard::FireHazard),
+        EmptyAction::no_hazards(light_off_config, turn_light_off),
     )?
-    .add_action(DeviceAction::no_hazards(toggle_config, toggle))?
-    .add_action(DeviceAction::no_hazards(
+    .add_action(EmptyAction::no_hazards(toggle_config, toggle))?
+    .add_action(SerialAction::no_hazards(
         light_on_post_config,
         turn_light_on,
     ))?

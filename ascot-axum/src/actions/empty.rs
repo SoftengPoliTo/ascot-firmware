@@ -14,7 +14,7 @@ use axum::{
 
 use serde::{Deserialize, Serialize};
 
-use super::{Action, ActionError, DeviceAction, Internal};
+use super::{private::Internal, Action, ActionError, DeviceAction};
 
 /// Empty payload.
 #[derive(Serialize, Deserialize)]

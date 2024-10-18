@@ -74,13 +74,15 @@ impl IntoResponse for ActionError {
     }
 }
 
-pub trait Action: Internal {
+pub trait Action: private::Internal {
     fn miss_hazard(&self, hazard: Hazard) -> bool;
     fn miss_hazards(&self, hazards: &'static [Hazard]) -> bool;
 }
 
-pub(crate) trait Internal {
-    fn device_action(self) -> DeviceAction;
+mod private {
+    pub(crate) trait Internal {
+        fn device_action(self) -> super::DeviceAction;
+    }
 }
 
 #[derive(Debug)]
@@ -117,5 +119,5 @@ impl DeviceAction {
     }
 }
 
-pub use empty::EmptyAction;
-pub use serial::SerialAction;
+pub use empty::{EmptyAction, EmptyPayload};
+pub use serial::{SerialAction, SerialPayload};
