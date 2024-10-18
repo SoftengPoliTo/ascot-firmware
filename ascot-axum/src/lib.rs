@@ -2,6 +2,7 @@ extern crate alloc;
 
 pub mod devices;
 
+pub mod actions;
 pub mod device;
 pub mod error;
 pub mod server;
@@ -11,5 +12,4 @@ pub mod extract {
     pub use axum::extract::{Extension, Json, Path};
 }
 
-mod output_type;
 mod services;

@@ -15,7 +15,7 @@ use ascot_library::input::Input;
 use ascot_library::route::Route;
 
 // Ascot axum device.
-use ascot_axum::device::{DeviceAction, DeviceError, DevicePayload};
+use ascot_axum::device::{DeviceAction, DeviceError, EmptyPayload, SerialPayload};
 use ascot_axum::devices::light::Light;
 use ascot_axum::error::Error;
 use ascot_axum::extract::{Extension, Json};
@@ -71,26 +71,26 @@ struct Inputs {
 async fn turn_light_on(
     Extension(state): Extension<DeviceState>,
     Json(inputs): Json<Inputs>,
-) -> Result<DevicePayload, DeviceError> {
+) -> Result<SerialPayload<LightOnResponse>, DeviceError> {
     let mut light = state.lock().await;
     light.turn_light_on(inputs.brightness, inputs.save_energy);
 
-    DevicePayload::new(LightOnResponse {
+    Ok(SerialPayload::new(LightOnResponse {
         brightness: light.brightness,
         save_energy: light.save_energy,
-    })
+    }))
 }
 
 async fn turn_light_off(
     Extension(state): Extension<DeviceState>,
-) -> Result<DevicePayload, DeviceError> {
+) -> Result<EmptyPayload, DeviceError> {
     state.lock().await.turn_light_off();
-    Ok(DevicePayload::empty())
+    Ok(EmptyPayload::new("Turn light off worked perfectly"))
 }
 
-async fn toggle(Extension(state): Extension<DeviceState>) -> Result<DevicePayload, DeviceError> {
+async fn toggle(Extension(state): Extension<DeviceState>) -> Result<EmptyPayload, DeviceError> {
     state.lock().await.toggle();
-    Ok(DevicePayload::empty())
+    Ok(EmptyPayload::new("Toggle worked perfectly"))
 }
 
 #[derive(Parser)]

@@ -1,155 +1,12 @@
-use ascot_library::device::{DeviceData, DeviceErrorKind, DeviceKind, DeviceSerializer};
-use ascot_library::hazards::{Hazard, Hazards};
-use ascot_library::route::{RestKind, Route, RouteConfigs, RouteHazards, RouteMode, RoutesHazards};
+use ascot_library::device::{DeviceData, DeviceKind, DeviceSerializer};
+use ascot_library::route::{RouteConfigs, RouteHazards, RoutesHazards};
 
-use axum::{
-    extract::Json,
-    handler::Handler,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Router,
-};
+use axum::Router;
 
-use serde::Serialize;
-
-use crate::output_type::private::OutputTypeName;
+use crate::actions::Action;
 
 // Default main route for a device.
 const DEFAULT_MAIN_ROUTE: &str = "/device";
-
-/// A device payload for a determined action.
-pub struct DevicePayload(ascot_library::device::DevicePayload);
-
-impl DevicePayload {
-    /// Creates an empty [`DevicePayload`].
-    #[inline]
-    pub fn empty() -> Self {
-        Self(ascot_library::device::DevicePayload::empty())
-    }
-
-    /// Creates a [`DevicePayload`].
-    #[inline]
-    pub fn new(value: impl Serialize) -> core::result::Result<Self, DeviceError> {
-        ascot_library::device::DevicePayload::new(value)
-            .map(Self)
-            .map_err(DeviceError)
-    }
-}
-
-impl IntoResponse for DevicePayload {
-    fn into_response(self) -> Response {
-        (StatusCode::OK, Json(self.0)).into_response()
-    }
-}
-
-/// A device error response.
-pub struct DeviceError(ascot_library::device::DeviceError);
-
-impl DeviceError {
-    /// Creates a new [`DeviceError`] where the error is given as
-    /// a string slice.
-    pub fn from_str(kind: DeviceErrorKind, info: &str) -> Self {
-        Self(ascot_library::device::DeviceError::from_str(kind, info))
-    }
-
-    /// Creates a new [`DeviceError`] where the error is given as a
-    /// [`String`].
-    pub fn from_string(kind: DeviceErrorKind, info: String) -> Self {
-        Self::from_str(kind, &info)
-    }
-}
-
-impl IntoResponse for DeviceError {
-    fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(self.0)).into_response()
-    }
-}
-
-/// A device action connects a server route with a device handler and,
-/// optionally, with every possible hazards associated with the handler.
-#[derive(Debug)]
-pub struct DeviceAction {
-    // Route.
-    pub(crate) route: Route,
-    // Hazards.
-    pub(crate) hazards: Hazards,
-    // Router.
-    pub(crate) router: Router,
-}
-
-impl DeviceAction {
-    /// Creates a new [`DeviceAction`].
-    #[inline]
-    pub fn no_hazards<H, T>(route: Route, handler: H) -> Self
-    where
-        H: Handler<T, ()> + OutputTypeName<T>,
-        T: 'static,
-    {
-        Self::init(route, Hazards::init(), handler)
-    }
-
-    /// Creates a new [`DeviceAction`] with a single [`Hazard`].
-    #[inline]
-    pub fn with_hazard<H, T>(route: Route, handler: H, hazard: Hazard) -> Self
-    where
-        H: Handler<T, ()> + OutputTypeName<T>,
-        T: 'static,
-    {
-        let mut hazards = Hazards::init();
-        hazards.add(hazard);
-
-        Self::init(route, hazards, handler)
-    }
-
-    /// Creates a new [`DeviceAction`] with [`Hazard`]s.
-    #[inline]
-    pub fn with_hazards<H, T>(route: Route, handler: H, input_hazards: &'static [Hazard]) -> Self
-    where
-        H: Handler<T, ()> + OutputTypeName<T>,
-        T: 'static,
-    {
-        let mut hazards = Hazards::init();
-        input_hazards.iter().for_each(|hazard| {
-            hazards.add(*hazard);
-        });
-
-        Self::init(route, hazards, handler)
-    }
-
-    /// Checks whether a [`DeviceAction`] misses a specific [`Hazard`].
-    #[inline]
-    pub fn miss_hazard(&self, hazard: Hazard) -> bool {
-        !self.hazards.contains(hazard)
-    }
-
-    /// Checks whether a [`DeviceAction`] misses the given [`Hazard`]s.
-    #[inline]
-    pub fn miss_hazards(&self, hazards: &'static [Hazard]) -> bool {
-        !hazards.iter().all(|hazard| self.hazards.contains(*hazard))
-    }
-
-    fn init<H, T>(mut route: Route, hazards: Hazards, handler: H) -> Self
-    where
-        H: Handler<T, ()> + OutputTypeName<T>,
-        T: 'static,
-    {
-        route.join_inputs(RouteMode::Linear, Some(":"));
-
-        Self {
-            hazards,
-            router: Router::new().route(
-                route.route(),
-                match route.kind() {
-                    RestKind::Get => axum::routing::get(handler),
-                    RestKind::Put => axum::routing::put(handler),
-                    RestKind::Post => axum::routing::post(handler),
-                    RestKind::Delete => axum::routing::delete(handler),
-                },
-            ),
-            route,
-        }
-    }
-}
 
 // Build a device from a precise device.
 pub(crate) trait DeviceBuilder<S>
@@ -210,7 +67,8 @@ where
 
     /// Adds a [`DeviceAction`].
     #[inline]
-    pub fn add_action(mut self, device_chainer: DeviceAction) -> Self {
+    pub fn add_action(mut self, device_chainer: impl Action) -> Self {
+        let device_chainer = device_chainer.device_action();
         self.router = self.router.merge(device_chainer.router);
         self.routes_hazards.add(RouteHazards::new(
             device_chainer.route,
