@@ -3,7 +3,7 @@ use ascot_library::hazards::Hazard;
 
 use heapless::FnvIndexSet;
 
-use crate::actions::Action;
+use crate::actions::private::Action;
 use crate::device::{Device, DeviceBuilder};
 use crate::error::{Error, ErrorKind, Result};
 

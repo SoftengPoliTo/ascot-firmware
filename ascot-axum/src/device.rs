@@ -3,7 +3,7 @@ use ascot_library::route::{RouteConfigs, RouteHazards, RoutesHazards};
 
 use axum::Router;
 
-use crate::actions::Action;
+use crate::actions::private::Action;
 
 // Default main route for a device.
 const DEFAULT_MAIN_ROUTE: &str = "/device";

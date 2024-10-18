@@ -14,7 +14,10 @@ use axum::{
 
 use serde::{Deserialize, Serialize};
 
-use super::{private::Internal, Action, ActionError, DeviceAction};
+use super::{
+    private::{Action, Internal},
+    ActionError, DeviceAction,
+};
 
 /// Empty payload.
 #[derive(Serialize, Deserialize)]
@@ -68,7 +71,7 @@ super::all_the_tuples!(impl_empty_type_name);
 pub struct EmptyAction(DeviceAction);
 
 impl Internal for EmptyAction {
-    fn device_action(self) -> DeviceAction {
+    fn device_action(self) -> super::DeviceAction {
         self.0
     }
 }

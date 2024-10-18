@@ -14,7 +14,10 @@ use axum::{
 
 use serde::{Deserialize, Serialize};
 
-use super::{private::Internal, Action, ActionError, DeviceAction};
+use super::{
+    private::{Action, Internal},
+    ActionError, DeviceAction,
+};
 
 /// Serial payload structure.
 #[derive(Serialize, Deserialize)]
@@ -70,7 +73,7 @@ super::all_the_tuples!(impl_serial_type_name);
 pub struct SerialAction(DeviceAction);
 
 impl Internal for SerialAction {
-    fn device_action(self) -> DeviceAction {
+    fn device_action(self) -> super::DeviceAction {
         self.0
     }
 }
