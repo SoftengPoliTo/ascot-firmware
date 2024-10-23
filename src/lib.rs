@@ -10,6 +10,8 @@ const MAXIMUM_ELEMENTS: usize = 8;
 
 pub mod actions;
 pub mod device;
+pub mod economy;
+pub mod energy;
 pub mod error;
 pub mod hazards;
 pub mod input;

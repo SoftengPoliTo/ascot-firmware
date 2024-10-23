@@ -1,9 +1,13 @@
 use ascot_library::device::{DeviceData, DeviceKind, DeviceSerializer};
-use ascot_library::route::{RouteConfigs, RoutesHazards};
+use ascot_library::economy::Economy;
+use ascot_library::energy::Energy;
+use ascot_library::route::{Route, RouteConfigs, RoutesHazards};
 
 use axum::Router;
 
-use crate::actions::Action;
+use serde::Serialize;
+
+use crate::actions::{Action, SerialAction, SerialPayload};
 
 // Default main route for a device.
 const DEFAULT_MAIN_ROUTE: &str = "/device";
@@ -66,6 +70,27 @@ where
         self
     }
 
+    /// Adds a `GET` route to visualize the device energy data.
+    pub fn add_energy(
+        self,
+        route_path: &'static str,
+        description: &'static str,
+        energy_data: Energy,
+    ) -> Self {
+        self.define_get_route(route_path, description, energy_data)
+    }
+
+    /// Adds a `GET` route to visualize the device economy data.
+    #[inline(always)]
+    pub fn add_economy(
+        self,
+        route_path: &'static str,
+        description: &'static str,
+        economy_data: Economy,
+    ) -> Self {
+        self.define_get_route(route_path, description, economy_data)
+    }
+
     /// Sets a device state.
     #[inline]
     pub fn state(mut self, state: S) -> Self {
@@ -90,5 +115,21 @@ where
     pub(crate) fn finalize(mut self) -> Self {
         self.router = Router::new().nest(self.main_route, self.router);
         self
+    }
+
+    fn define_get_route<K: Serialize + Clone + Send + 'static>(
+        self,
+        route_path: &'static str,
+        description: &'static str,
+        data: K,
+    ) -> Self {
+        let data_closure = move || Ok(SerialPayload::new(data));
+
+        let data_action = SerialAction::no_hazards(
+            Route::get(route_path).description(description),
+            move || async { data_closure() },
+        );
+
+        self.add_action(data_action)
     }
 }
