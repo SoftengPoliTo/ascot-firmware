@@ -55,6 +55,7 @@ where
 {
     pub api_state: S,
     energy: EnergyState,
+    economy: EconomyState,
 }
 
 #[derive(Clone)]
@@ -68,6 +69,20 @@ where
 {
     fn from_ref(app_state: &AppState<S>) -> EnergyState {
         app_state.energy.clone()
+    }
+}
+
+#[derive(Clone)]
+struct EconomyState {
+    economy: Arc<Mutex<Economy>>,
+}
+
+impl<S> FromRef<AppState<S>> for EconomyState
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn from_ref(app_state: &AppState<S>) -> EconomyState {
+        app_state.economy.clone()
     }
 }
 
