@@ -1,9 +1,13 @@
+use alloc::sync::Arc;
+
 use ascot_library::device::{DeviceData, DeviceKind, DeviceSerializer};
 use ascot_library::economy::Economy;
 use ascot_library::energy::Energy;
 use ascot_library::route::{Route, RouteConfigs, RoutesHazards};
 
-use axum::Router;
+use async_lock::Mutex;
+
+use axum::{extract::FromRef, Router};
 
 use serde::Serialize;
 
@@ -42,6 +46,28 @@ where
             main_route: self.main_route,
             route_configs,
         }
+    }
+}
+
+pub struct AppState<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    pub api_state: S,
+    energy: EnergyState,
+}
+
+#[derive(Clone)]
+struct EnergyState {
+    energy: Arc<Mutex<Energy>>,
+}
+
+impl<S> FromRef<AppState<S>> for EnergyState
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn from_ref(app_state: &AppState<S>) -> EnergyState {
+        app_state.energy.clone()
     }
 }
 

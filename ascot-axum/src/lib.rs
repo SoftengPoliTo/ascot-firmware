@@ -9,7 +9,7 @@ pub mod server;
 pub mod service;
 
 pub mod extract {
-    pub use axum::extract::{Extension, Json, Path};
+    pub use axum::extract::{Extension, FromRef, Json, Path};
 }
 
 mod services;

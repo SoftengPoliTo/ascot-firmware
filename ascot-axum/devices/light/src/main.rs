@@ -16,9 +16,10 @@ use ascot_library::route::Route;
 
 // Ascot axum device.
 use ascot_axum::actions::{ActionError, EmptyAction, EmptyPayload, SerialAction, SerialPayload};
+use ascot_axum::device::AppState;
 use ascot_axum::devices::light::Light;
 use ascot_axum::error::Error;
-use ascot_axum::extract::{Extension, Json};
+use ascot_axum::extract::{Extension, FromRef, Json};
 use ascot_axum::server::AscotServer;
 use ascot_axum::service::ServiceConfig;
 
@@ -51,6 +52,13 @@ impl core::ops::Deref for DeviceState {
 impl core::ops::DerefMut for DeviceState {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+// Converting `AppState` in an `DeviceState`.
+impl FromRef<AppState<DeviceState>> for DeviceState {
+    fn from_ref(app_state: &AppState<DeviceState>) -> DeviceState {
+        app_state.api_state.clone()
     }
 }
 

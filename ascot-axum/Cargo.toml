@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 ascot-library = { version = "0.1.0", path = "../" }
+async-lock = "3.3.0"
 axum = "0.7.7"
 heapless = { version = "0.8.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
