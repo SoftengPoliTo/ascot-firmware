@@ -18,12 +18,12 @@ use tokio_util::io::ReaderStream;
 
 use super::{ActionError, DeviceAction, MandatoryAction};
 
-/// Stream headers.
-pub struct Headers(&'static [(&'static str, &'static str)]);
+// Stream headers.
+struct Headers(&'static [(HeaderName, &'static str)]);
 
 impl Headers {
     /// Creates [`Headers`].
-    pub const fn new(headers: &'static [(&'static str, &'static str)]) -> Self {
+    const fn new(headers: &'static [(HeaderName, &'static str)]) -> Self {
         Self(headers)
     }
 }
@@ -33,17 +33,17 @@ impl IntoResponseParts for Headers {
 
     fn into_response_parts(self, mut res: ResponseParts) -> Result<ResponseParts, Self::Error> {
         for (name, value) in self.0 {
-            match (name.parse::<HeaderName>(), value.parse::<HeaderValue>()) {
-                (Ok(name), Ok(value)) => {
+            match value.parse::<HeaderValue>() {
+                Ok(value) => {
                     res.headers_mut().insert(name, value);
                 }
-                (Err(_), _) => {
+                /*(Err(_), _) => {
                     return Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
                         format!("Invalid header name {name}"),
                     ));
-                }
-                (_, Err(_)) => {
+                }*/
+                Err(_) => {
                     return Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
                         format!("Invalid header value {value}"),
@@ -64,8 +64,11 @@ pub struct StreamPayload {
 
 impl StreamPayload {
     /// Creates a new [`StreamPayload`].
-    pub const fn new(headers: Headers, data: Vec<u8>) -> Self {
-        Self { headers, data }
+    pub const fn new(headers: &'static [(HeaderName, &'static str)], data: Vec<u8>) -> Self {
+        Self {
+            headers: Headers::new(headers),
+            data,
+        }
     }
 }
 
@@ -103,7 +106,7 @@ super::all_the_tuples!(impl_empty_type_name);
 
 /// Creates a mandatory stateful [`DeviceAction`] with a [`StreamPayload`].
 #[inline(always)]
-pub fn mandatory_empty_stateful<H, T, S>(
+pub fn mandatory_stream_stateful<H, T, S>(
     route_hazards: RouteHazards,
     handler: H,
 ) -> impl FnOnce(S) -> MandatoryAction<false>
@@ -116,7 +119,7 @@ where
 }
 
 /// Creates a stateful [`DeviceAction`] with a [`StreamPayload`].
-pub fn empty_stateful<H, T, S>(
+pub fn stream_stateful<H, T, S>(
     route_hazards: RouteHazards,
     handler: H,
 ) -> impl FnOnce(S) -> DeviceAction
@@ -130,7 +133,7 @@ where
 
 /// Creates a mandatory stateless [`DeviceAction`] with an [`StreamPayload`].
 #[inline(always)]
-pub fn mandatory_empty_stateless<H, T, S>(
+pub fn mandatory_stream_stateless<H, T, S>(
     route_hazards: RouteHazards,
     handler: H,
 ) -> impl FnOnce(S) -> MandatoryAction<false>
@@ -143,7 +146,7 @@ where
 }
 
 /// Creates a stateless [`DeviceAction`] with a [`StreamPayload`].
-pub fn empty_stateless<H, T, S>(
+pub fn stream_stateless<H, T, S>(
     route_hazards: RouteHazards,
     handler: H,
 ) -> impl FnOnce(S) -> DeviceAction

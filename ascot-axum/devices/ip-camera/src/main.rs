@@ -5,15 +5,19 @@ use core::net::Ipv4Addr;
 use std::sync::Arc;
 
 // Ascot library.
-use ascot_library::device::{DeviceErrorKind, DeviceKind};
+use ascot_library::actions::ActionErrorKind;
 use ascot_library::hazards::Hazard;
 use ascot_library::input::Input;
-use ascot_library::route::Route;
+use ascot_library::route::{Route, RouteHazards};
 
 // Ascot axum.
-use ascot_axum::device::{Device, DeviceAction, DeviceError, DevicePayload};
+use ascot_axum::actions::empty::empty_stateless;
+use ascot_axum::actions::serial::{serial_stateless, SerialPayload};
+//use ascot_axum::actions::stream::stream_stateful;
+use ascot_axum::actions::ActionError;
+use ascot_axum::device::Device;
 use ascot_axum::error::Error;
-use ascot_axum::extract::{Extension, Json, Path};
+use ascot_axum::extract::{Json, Path};
 use ascot_axum::server::AscotServer;
 use ascot_axum::service::ServiceConfig;
 
@@ -44,9 +48,8 @@ use crate::screenshot::{
     screenshot_exact, screenshot_highest_framerate, screenshot_highest_resolution, screenshot_none,
 };
 
-#[inline(always)]
-fn camera_error(error: String) -> DeviceError {
-    DeviceError::from_string(DeviceErrorKind::Wrong, error)
+fn camera_error(error: String) -> ActionError {
+    ActionError::from_str(ActionErrorKind::Internal, &error)
 }
 
 #[derive(Serialize)]
@@ -56,10 +59,10 @@ struct ViewCamerasResponse {
     cameras: Vec<CameraInfo>,
 }
 
-async fn view_available_cameras() -> Result<DevicePayload, DeviceError> {
+async fn view_available_cameras() -> Result<SerialPayload<ViewCamerasResponse>, ActionError> {
     // Retrieve camera backend
-    let camera_backend = native_api_backend().ok_or(DeviceError::from_str(
-        DeviceErrorKind::Wrong,
+    let camera_backend = native_api_backend().ok_or(ActionError::from_str(
+        ActionErrorKind::Internal,
         "No camera backend found",
     ))?;
 
@@ -76,10 +79,10 @@ async fn view_available_cameras() -> Result<DevicePayload, DeviceError> {
         info!("{camera}");
     }
 
-    DevicePayload::new(ViewCamerasResponse {
+    Ok(SerialPayload::new(ViewCamerasResponse {
         number_of_cameras: camera_len,
         cameras,
-    })
+    }))
 }
 
 #[derive(Serialize)]
@@ -101,7 +104,9 @@ struct FormatData {
     fps: String,
 }
 
-async fn camera_data(Path(camera_index): Path<u32>) -> Result<DevicePayload, DeviceError> {
+async fn camera_data(
+    Path(camera_index): Path<u32>,
+) -> Result<SerialPayload<CameraDataResponse>, ActionError> {
     // Create camera
     let mut camera = Camera::new(
         CameraIndex::Index(camera_index),
@@ -162,11 +167,11 @@ async fn camera_data(Path(camera_index): Path<u32>) -> Result<DevicePayload, Dev
         })
         .collect::<Vec<CameraFrameFormat>>();
 
-    DevicePayload::new(CameraDataResponse {
+    Ok(SerialPayload::new(CameraDataResponse {
         camera_index,
         controls,
         frame_formats,
-    })
+    }))
 }
 
 /*fn camera_stream(
@@ -289,77 +294,81 @@ async fn main() -> Result<(), Error> {
     // Command line parser.
     let cli = Cli::parse();
 
-    // Action to view all available cameras.
-    let view_cameras_action = DeviceAction::no_hazards(
-        Route::get("/view-all").description("View all cameras."),
-        view_available_cameras,
-    );
+    // Route to view all available cameras.
+    let view_cameras_route =
+        RouteHazards::no_hazards(Route::get("/view-all").description("View all cameras."));
 
-    // Action to view the data of a camera.
-    let camera_data_action = DeviceAction::no_hazards(
-        Route::get("/:camera_index").description("View camera data."),
-        camera_data,
-    );
+    // Route to view the data of a camera.
+    let camera_data_route =
+        RouteHazards::no_hazards(Route::get("/:camera_index").description("View camera data."));
 
-    // Action to view screenshot with no format.
-    let screenshot_none_action = DeviceAction::no_hazards(
+    // Route to view screenshot with no format.
+    let screenshot_none_route = RouteHazards::no_hazards(
         Route::post("/screenshot-none").description("Screenshot from a camera with no format."),
-        screenshot_none,
     );
 
-    // Action to view screenshot with absolute resolution.
-    let screenshot_absolute_resolution_action = DeviceAction::no_hazards(
+    // Route to view screenshot with absolute resolution.
+    let screenshot_absolute_resolution_route = RouteHazards::no_hazards(
         Route::post("/screenshot-absolute-resolution")
             .description("Screenshot from a camera with absolute resolution."),
-        screenshot_absolute_resolution,
     );
 
-    // Action to view screenshot with absolute framerate.
-    let screenshot_absolute_framerate_action = DeviceAction::no_hazards(
+    // Route to view screenshot with absolute framerate.
+    let screenshot_absolute_framerate_route = RouteHazards::no_hazards(
         Route::post("/screenshot-absolute-framerate")
             .description("Screenshot from a camera with absolute framerate."),
-        screenshot_absolute_framerate,
     );
 
-    // Action to view screenshot with highest resolution.
-    let screenshot_highest_resolution_action = DeviceAction::no_hazards(
+    // Route to view screenshot with highest resolution.
+    let screenshot_highest_resolution_route = RouteHazards::no_hazards(
         Route::post("/screenshot-highest-resolution")
             .description("Screenshot from a camera with highest resolution."),
-        screenshot_highest_resolution,
     );
 
-    // Action to view screenshot with highest framerate.
-    let screenshot_highest_framerate_action = DeviceAction::no_hazards(
+    // Route to view screenshot with highest framerate.
+    let screenshot_highest_framerate_route = RouteHazards::no_hazards(
         Route::post("/screenshot-highest-framerate")
             .description("Screenshot from a camera with highest framerate."),
-        screenshot_highest_framerate,
     );
 
-    // Action to view screenshot with exact approach.
-    let screenshot_exact_action = DeviceAction::no_hazards(
+    // Route to view screenshot with exact approach.
+    let screenshot_exact_route = RouteHazards::no_hazards(
         Route::post("/screenshot-exact").description("Screenshot from a camera with exact type."),
-        screenshot_exact,
     );
 
-    // Action to view screenshot with closest type.
-    let screenshot_closest_action = DeviceAction::no_hazards(
+    // Route to view screenshot with closest type.
+    let screenshot_closest_route = RouteHazards::no_hazards(
         Route::post("/screenshot-closest")
             .description("Screenshot from a camera with closest type."),
-        screenshot_closest,
     );
 
     // A camera device which is going to be run on the server.
-    let device = Device::<()>::unknown()
+    let device = Device::new()
         .main_route("/camera")
-        .add_action(view_cameras_action)
-        .add_action(camera_data_action)
-        .add_action(screenshot_none_action)
-        .add_action(screenshot_absolute_resolution_action)
-        .add_action(screenshot_absolute_framerate_action)
-        .add_action(screenshot_highest_resolution_action)
-        .add_action(screenshot_highest_framerate_action)
-        .add_action(screenshot_exact_action)
-        .add_action(screenshot_closest_action);
+        .add_action(serial_stateless(view_cameras_route, view_available_cameras))
+        .add_action(serial_stateless(camera_data_route, camera_data))
+        .add_action(empty_stateless(screenshot_none_route, screenshot_none))
+        .add_action(empty_stateless(
+            screenshot_absolute_resolution_route,
+            screenshot_absolute_resolution,
+        ))
+        .add_action(empty_stateless(
+            screenshot_absolute_framerate_route,
+            screenshot_absolute_framerate,
+        ))
+        .add_action(empty_stateless(
+            screenshot_highest_resolution_route,
+            screenshot_highest_resolution,
+        ))
+        .add_action(empty_stateless(
+            screenshot_highest_framerate_route,
+            screenshot_highest_framerate,
+        ))
+        .add_action(empty_stateless(screenshot_exact_route, screenshot_exact))
+        .add_action(empty_stateless(
+            screenshot_closest_route,
+            screenshot_closest,
+        ));
 
     // Run a discovery service and the device on the server.
     AscotServer::new(device)
