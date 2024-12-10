@@ -2,7 +2,7 @@
 use ascot_axum::actions::stream::StreamPayload;
 use ascot_axum::actions::ActionError;
 
-use ascot_axum::extract::Json;
+use ascot_axum::extract::{Json, Path};
 use ascot_axum::header;
 
 // Nokhwa library
@@ -61,6 +61,7 @@ fn run_camera_screenshot(
 
     let headers = [
         (header::CONTENT_TYPE, "image/png"),
+        (header::CONTENT_LENGTH, &format!("{}", decoded.len())),
         (
             header::CONTENT_DISPOSITION,
             "attachment; filename=\"screenshot.png\"",
@@ -70,34 +71,34 @@ fn run_camera_screenshot(
     Ok(StreamPayload::new(headers, decoded.into_vec()))
 }
 
-#[derive(Deserialize)]
+/*#[derive(Deserialize)]
 pub(crate) struct CameraInputIndex {
     camera_index: u32,
-}
+}*/
 
 pub(crate) async fn screenshot_none(
-    Json(input): Json<CameraInputIndex>,
+    Path(camera_index): Path<u32>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
-        input.camera_index,
+        camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
     )
 }
 
 pub(crate) async fn screenshot_absolute_resolution(
-    Json(input): Json<CameraInputIndex>,
+    Path(camera_index): Path<u32>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
-        input.camera_index,
+        camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
     )
 }
 
 pub(crate) async fn screenshot_absolute_framerate(
-    Json(input): Json<CameraInputIndex>,
+    Path(camera_index): Path<u32>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
-        input.camera_index,
+        camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
     )
 }

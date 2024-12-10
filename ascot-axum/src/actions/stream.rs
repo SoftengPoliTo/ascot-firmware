@@ -20,7 +20,7 @@ pub struct StreamPayload(Response);
 
 impl StreamPayload {
     /// Creates a new [`StreamPayload`].
-    pub fn new<const N: usize>(headers: [(HeaderName, &'static str); N], data: Vec<u8>) -> Self {
+    pub fn new<const N: usize>(headers: [(HeaderName, &str); N], data: Vec<u8>) -> Self {
         let stream = ReaderStream::new(Cursor::new(data));
         let response = (headers, Body::from_stream(stream)).into_response();
         Self(response)

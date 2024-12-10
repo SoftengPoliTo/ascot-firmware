@@ -300,18 +300,19 @@ async fn main() -> Result<(), Error> {
 
     // Route to view screenshot with no format.
     let screenshot_none_route = RouteHazards::no_hazards(
-        Route::post("/screenshot-none").description("Screenshot from a camera with no format."),
+        Route::get("/:camera_index/screenshot-none")
+            .description("Screenshot from a camera with no format."),
     );
 
     // Route to view screenshot with absolute resolution.
     let screenshot_absolute_resolution_route = RouteHazards::no_hazards(
-        Route::post("/screenshot-absolute-resolution")
+        Route::get("/:camera_index/screenshot-absolute-resolution")
             .description("Screenshot from a camera with absolute resolution."),
     );
 
     // Route to view screenshot with absolute framerate.
     let screenshot_absolute_framerate_route = RouteHazards::no_hazards(
-        Route::post("/screenshot-absolute-framerate")
+        Route::get("/:camera_index/screenshot-absolute-framerate")
             .description("Screenshot from a camera with absolute framerate."),
     );
 
