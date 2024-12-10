@@ -1,9 +1,13 @@
+use std::io::Cursor;
+
 // Ascot axum.
 use ascot_axum::actions::stream::StreamPayload;
 use ascot_axum::actions::ActionError;
 
 use ascot_axum::extract::{Json, Path};
 use ascot_axum::header;
+
+use image::ImageFormat;
 
 // Nokhwa library
 use nokhwa::{
@@ -28,6 +32,7 @@ use crate::camera_error;
 fn run_camera_screenshot(
     camera_index: u32,
     format: RequestedFormat,
+    suffix_filename: &str,
 ) -> Result<StreamPayload, ActionError> {
     // Create camera
     let mut camera = Camera::new(CameraIndex::Index(camera_index), format)
@@ -59,16 +64,32 @@ fn run_camera_screenshot(
 
     info!("Decoded frame of size {}", decoded.len());
 
+    // Convert frame into a png image
+    let mut cursor = Cursor::new(Vec::new());
+    decoded
+        .write_to(&mut cursor, ImageFormat::Png)
+        .map_err(|e| {
+            camera_error(format!(
+                "Error in converting a frame into `png` for {camera_index}: {e}"
+            ))
+        })?;
+
+    // Retrieve raw data
+    let raw_data = cursor.into_inner();
+    let raw_data_len = raw_data.len();
+
+    info!("Image size {}", raw_data_len);
+
     let headers = [
         (header::CONTENT_TYPE, "image/png"),
-        (header::CONTENT_LENGTH, &format!("{}", decoded.len())),
+        (header::CONTENT_LENGTH, &format!("{}", raw_data_len)),
         (
             header::CONTENT_DISPOSITION,
-            "attachment; filename=\"screenshot.png\"",
+            &format!("attachment; filename=\"screenshot-{suffix_filename}.png\""),
         ),
     ];
 
-    Ok(StreamPayload::new(headers, decoded.into_vec()))
+    Ok(StreamPayload::new(headers, raw_data))
 }
 
 /*#[derive(Deserialize)]
@@ -82,6 +103,7 @@ pub(crate) async fn screenshot_none(
     run_camera_screenshot(
         camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
+        "none",
     )
 }
 
@@ -91,6 +113,7 @@ pub(crate) async fn screenshot_absolute_resolution(
     run_camera_screenshot(
         camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+        "absolute-resolution",
     )
 }
 
@@ -100,6 +123,7 @@ pub(crate) async fn screenshot_absolute_framerate(
     run_camera_screenshot(
         camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
+        "absolute-framerate",
     )
 }
 
@@ -118,6 +142,7 @@ pub(crate) async fn screenshot_highest_resolution(
     run_camera_screenshot(
         inputs.camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(resolution)),
+        "highest-resolution",
     )
 }
 
@@ -133,6 +158,7 @@ pub(crate) async fn screenshot_highest_framerate(
     run_camera_screenshot(
         inputs.camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestFrameRate(inputs.fps)),
+        "highest-framerate",
     )
 }
 
@@ -166,6 +192,7 @@ pub(crate) async fn screenshot_exact(
     run_camera_screenshot(
         camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(camera_format)),
+        "exact",
     )
 }
 
@@ -177,5 +204,6 @@ pub(crate) async fn screenshot_closest(
     run_camera_screenshot(
         camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(camera_format)),
+        "closest",
     )
 }
