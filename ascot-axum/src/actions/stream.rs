@@ -7,75 +7,29 @@ use ascot_library::route::RouteHazards;
 use axum::{
     body::Body,
     handler::Handler,
-    http::{
-        header::{HeaderName, HeaderValue},
-        StatusCode,
-    },
-    response::{IntoResponse, IntoResponseParts, Response, ResponseParts},
+    http::header::HeaderName,
+    response::{IntoResponse, Response},
 };
 
 use tokio_util::io::ReaderStream;
 
 use super::{ActionError, DeviceAction, MandatoryAction};
 
-// Stream headers.
-struct Headers(&'static [(HeaderName, &'static str)]);
-
-impl Headers {
-    /// Creates [`Headers`].
-    const fn new(headers: &'static [(HeaderName, &'static str)]) -> Self {
-        Self(headers)
-    }
-}
-
-impl IntoResponseParts for Headers {
-    type Error = (StatusCode, String);
-
-    fn into_response_parts(self, mut res: ResponseParts) -> Result<ResponseParts, Self::Error> {
-        for (name, value) in self.0 {
-            match value.parse::<HeaderValue>() {
-                Ok(value) => {
-                    res.headers_mut().insert(name, value);
-                }
-                /*(Err(_), _) => {
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Invalid header name {name}"),
-                    ));
-                }*/
-                Err(_) => {
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Invalid header value {value}"),
-                    ));
-                }
-            }
-        }
-
-        Ok(res)
-    }
-}
-
 /// A stream payload.
-pub struct StreamPayload {
-    headers: Headers,
-    data: Vec<u8>,
-}
+pub struct StreamPayload(Response);
 
 impl StreamPayload {
     /// Creates a new [`StreamPayload`].
-    pub const fn new(headers: &'static [(HeaderName, &'static str)], data: Vec<u8>) -> Self {
-        Self {
-            headers: Headers::new(headers),
-            data,
-        }
+    pub fn new<const N: usize>(headers: [(HeaderName, &'static str); N], data: Vec<u8>) -> Self {
+        let stream = ReaderStream::new(Cursor::new(data));
+        let response = (headers, Body::from_stream(stream)).into_response();
+        Self(response)
     }
 }
 
 impl IntoResponse for StreamPayload {
     fn into_response(self) -> Response {
-        let stream = ReaderStream::new(Cursor::new(self.data));
-        (self.headers, Body::from_stream(stream)).into_response()
+        self.0
     }
 }
 

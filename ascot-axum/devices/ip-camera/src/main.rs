@@ -11,9 +11,8 @@ use ascot_library::input::Input;
 use ascot_library::route::{Route, RouteHazards};
 
 // Ascot axum.
-use ascot_axum::actions::empty::empty_stateless;
 use ascot_axum::actions::serial::{serial_stateless, SerialPayload};
-//use ascot_axum::actions::stream::stream_stateful;
+use ascot_axum::actions::stream::stream_stateless;
 use ascot_axum::actions::ActionError;
 use ascot_axum::device::Device;
 use ascot_axum::error::Error;
@@ -347,25 +346,25 @@ async fn main() -> Result<(), Error> {
         .main_route("/camera")
         .add_action(serial_stateless(view_cameras_route, view_available_cameras))
         .add_action(serial_stateless(camera_data_route, camera_data))
-        .add_action(empty_stateless(screenshot_none_route, screenshot_none))
-        .add_action(empty_stateless(
+        .add_action(stream_stateless(screenshot_none_route, screenshot_none))
+        .add_action(stream_stateless(
             screenshot_absolute_resolution_route,
             screenshot_absolute_resolution,
         ))
-        .add_action(empty_stateless(
+        .add_action(stream_stateless(
             screenshot_absolute_framerate_route,
             screenshot_absolute_framerate,
         ))
-        .add_action(empty_stateless(
+        .add_action(stream_stateless(
             screenshot_highest_resolution_route,
             screenshot_highest_resolution,
         ))
-        .add_action(empty_stateless(
+        .add_action(stream_stateless(
             screenshot_highest_framerate_route,
             screenshot_highest_framerate,
         ))
-        .add_action(empty_stateless(screenshot_exact_route, screenshot_exact))
-        .add_action(empty_stateless(
+        .add_action(stream_stateless(screenshot_exact_route, screenshot_exact))
+        .add_action(stream_stateless(
             screenshot_closest_route,
             screenshot_closest,
         ));

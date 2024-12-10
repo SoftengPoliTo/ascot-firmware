@@ -1,7 +1,9 @@
 // Ascot axum.
-use ascot_axum::actions::empty::EmptyPayload;
+use ascot_axum::actions::stream::StreamPayload;
 use ascot_axum::actions::ActionError;
+
 use ascot_axum::extract::Json;
+use ascot_axum::header;
 
 // Nokhwa library
 use nokhwa::{
@@ -26,7 +28,7 @@ use crate::camera_error;
 fn run_camera_screenshot(
     camera_index: u32,
     format: RequestedFormat,
-) -> Result<EmptyPayload, ActionError> {
+) -> Result<StreamPayload, ActionError> {
     // Create camera
     let mut camera = Camera::new(CameraIndex::Index(camera_index), format)
         .map_err(|e| camera_error(format!("Error in retrieving camera {camera_index}: {e}")))?;
@@ -54,9 +56,18 @@ fn run_camera_screenshot(
     let decoded = frame
         .decode_image::<RgbFormat>()
         .map_err(|e| camera_error(format!("Error in decoding a frame for {camera_index}: {e}")))?;
+
     info!("Decoded frame of size {}", decoded.len());
 
-    Ok(EmptyPayload::new("Set correctly camera info"))
+    let headers = [
+        (header::CONTENT_TYPE, "image/png"),
+        (
+            header::CONTENT_DISPOSITION,
+            "attachment; filename=\"screenshot.png\"",
+        ),
+    ];
+
+    Ok(StreamPayload::new(headers, decoded.into_vec()))
 }
 
 #[derive(Deserialize)]
@@ -66,7 +77,7 @@ pub(crate) struct CameraInputIndex {
 
 pub(crate) async fn screenshot_none(
     Json(input): Json<CameraInputIndex>,
-) -> Result<EmptyPayload, ActionError> {
+) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
         input.camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
@@ -75,7 +86,7 @@ pub(crate) async fn screenshot_none(
 
 pub(crate) async fn screenshot_absolute_resolution(
     Json(input): Json<CameraInputIndex>,
-) -> Result<EmptyPayload, ActionError> {
+) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
         input.camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
@@ -84,7 +95,7 @@ pub(crate) async fn screenshot_absolute_resolution(
 
 pub(crate) async fn screenshot_absolute_framerate(
     Json(input): Json<CameraInputIndex>,
-) -> Result<EmptyPayload, ActionError> {
+) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
         input.camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
@@ -100,7 +111,7 @@ pub(crate) struct CameraResolution {
 
 pub(crate) async fn screenshot_highest_resolution(
     Json(inputs): Json<CameraResolution>,
-) -> Result<EmptyPayload, ActionError> {
+) -> Result<StreamPayload, ActionError> {
     let resolution = Resolution::new(inputs.x, inputs.y);
 
     run_camera_screenshot(
@@ -117,7 +128,7 @@ pub(crate) struct CameraFramerate {
 
 pub(crate) async fn screenshot_highest_framerate(
     Json(inputs): Json<CameraFramerate>,
-) -> Result<EmptyPayload, ActionError> {
+) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
         inputs.camera_index,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestFrameRate(inputs.fps)),
@@ -148,7 +159,7 @@ fn camera_format(inputs: CameraInputs) -> Result<(u32, CameraFormat), ActionErro
 
 pub(crate) async fn screenshot_exact(
     Json(inputs): Json<CameraInputs>,
-) -> Result<EmptyPayload, ActionError> {
+) -> Result<StreamPayload, ActionError> {
     let (camera_index, camera_format) = camera_format(inputs)?;
 
     run_camera_screenshot(
@@ -159,7 +170,7 @@ pub(crate) async fn screenshot_exact(
 
 pub(crate) async fn screenshot_closest(
     Json(inputs): Json<CameraInputs>,
-) -> Result<EmptyPayload, ActionError> {
+) -> Result<StreamPayload, ActionError> {
     let (camera_index, camera_format) = camera_format(inputs)?;
 
     run_camera_screenshot(
