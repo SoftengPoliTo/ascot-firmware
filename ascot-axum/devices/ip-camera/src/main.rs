@@ -47,8 +47,8 @@ use crate::screenshot::{
     screenshot_exact, screenshot_highest_framerate, screenshot_highest_resolution, screenshot_none,
 };
 
-fn camera_error(error: String) -> ActionError {
-    ActionError::from_str(ActionErrorKind::Internal, &error)
+fn camera_error(error: impl AsRef<str>) -> ActionError {
+    ActionError::internal(error.as_ref())
 }
 
 #[derive(Serialize)]
@@ -60,10 +60,7 @@ struct ViewCamerasResponse {
 
 async fn view_available_cameras() -> Result<SerialPayload<ViewCamerasResponse>, ActionError> {
     // Retrieve camera backend
-    let camera_backend = native_api_backend().ok_or(ActionError::from_str(
-        ActionErrorKind::Internal,
-        "No camera backend found",
-    ))?;
+    let camera_backend = native_api_backend().ok_or(camera_error("No camera backend found"))?;
 
     // Retrieve all cameras present on a system
     let cameras =
