@@ -43,7 +43,7 @@ fn run_camera_screenshot(
         .open_stream()
         .map_err(|e| camera_error(format!("Error in opening a stream for {camera_index}: {e}")))?;
 
-    // Retrieve camera frame.
+    // Retrieve camera frame as data buffer.
     let frame = camera
         .frame()
         .map_err(|e| camera_error(format!("Error in getting a frame for {camera_index}: {e}")))?;
@@ -57,24 +57,29 @@ fn run_camera_screenshot(
 
     info!("Capture camera screenshot of size {}", frame.buffer().len());
 
-    // Decode a frame
-    let decoded = frame
+    // Decode the frame and save its content into an image buffer
+    let decoded_frame = frame
         .decode_image::<RgbFormat>()
         .map_err(|e| camera_error(format!("Error in decoding a frame for {camera_index}: {e}")))?;
 
-    info!("Decoded frame of size {}", decoded.len());
+    info!(
+        "Decoded frame: {}x{} {}",
+        decoded_frame.width(),
+        decoded_frame.height(),
+        decoded_frame.len()
+    );
 
-    // Convert frame into a png image
+    // Convert the image buffer into a `png` image
     let mut cursor = Cursor::new(Vec::new());
-    decoded
+    decoded_frame
         .write_to(&mut cursor, ImageFormat::Png)
         .map_err(|e| {
             camera_error(format!(
-                "Error in converting a frame into `png` for {camera_index}: {e}"
+                "Error in converting the image buffer into `png` for {camera_index}: {e}"
             ))
         })?;
 
-    // Retrieve raw data
+    // Retrieve raw data consuming the cursor
     let raw_data = cursor.into_inner();
     let raw_data_len = raw_data.len();
 

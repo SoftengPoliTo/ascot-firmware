@@ -2,6 +2,8 @@ mod screenshot;
 
 use core::net::Ipv4Addr;
 
+use std::borrow::Cow;
+use std::io::Cursor;
 use std::sync::Arc;
 
 // Ascot library.
@@ -11,23 +13,34 @@ use ascot_library::input::Input;
 use ascot_library::route::{Route, RouteHazards};
 
 // Ascot axum.
-use ascot_axum::actions::serial::{serial_stateless, SerialPayload};
+use ascot_axum::actions::serial::{serial_stateful, serial_stateless, SerialPayload};
 use ascot_axum::actions::stream::stream_stateless;
 use ascot_axum::actions::ActionError;
 use ascot_axum::device::Device;
-use ascot_axum::error::Error;
+use ascot_axum::error::{Error, ErrorKind};
+use ascot_axum::extract::State;
 use ascot_axum::extract::{Json, Path};
 use ascot_axum::server::AscotServer;
 use ascot_axum::service::ServiceConfig;
 
+// Mutex
+use async_lock::Mutex;
+
 // Command line library
 use clap::Parser;
+
+// Flume
+use flume::Receiver;
+
+// Image buffer
+use image::ImageFormat;
 
 // Nokhwa library
 use nokhwa::{
     native_api_backend,
     pixel_format::{RgbAFormat, RgbFormat},
     query,
+    threaded::CallbackCamera,
     utils::{
         frame_formats, yuyv422_predicted_size, ApiBackend, CameraFormat, CameraIndex, CameraInfo,
         FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
@@ -51,6 +64,10 @@ fn camera_error(error: impl AsRef<str>) -> ActionError {
     ActionError::internal(error.as_ref())
 }
 
+fn startup_error(error: impl Into<Cow<'static, str>>) -> Error {
+    Error::new(ErrorKind::External, error)
+}
+
 #[derive(Serialize)]
 struct ViewCamerasResponse {
     #[serde(rename = "number-of-cameras")]
@@ -58,18 +75,16 @@ struct ViewCamerasResponse {
     cameras: Vec<CameraInfo>,
 }
 
+// Not a computationally intensive route, just some matches.
 async fn view_available_cameras() -> Result<SerialPayload<ViewCamerasResponse>, ActionError> {
-    // Retrieve camera backend
-    let camera_backend = native_api_backend().ok_or(camera_error("No camera backend found"))?;
-
     // Retrieve all cameras present on a system
     let cameras =
-        query(camera_backend).map_err(|e| camera_error(format!("No cameras found: {e}")))?;
+        query(ApiBackend::Auto).map_err(|e| camera_error(format!("No cameras found: {e}")))?;
 
     // Number of cameras
     let camera_len = cameras.len() as u8;
 
-    info!("There are {} available cameras.", camera_len);
+    info!("There are {camera_len} available cameras.");
 
     for camera in &cameras {
         info!("{camera}");
@@ -101,14 +116,10 @@ struct FormatData {
 }
 
 async fn camera_data(
+    State(state): State<InternalState>,
     Path(camera_index): Path<u32>,
 ) -> Result<SerialPayload<CameraDataResponse>, ActionError> {
-    // Create camera
-    let mut camera = Camera::new(
-        CameraIndex::Index(camera_index),
-        RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
-    )
-    .map_err(|e| camera_error(format!("Error in retrieving camera {camera_index}: {e}")))?;
+    let mut camera = state.camera.lock().await;
 
     // Get controls for a camera
     let controls = camera.camera_controls().map_err(|e| {
@@ -243,6 +254,21 @@ impl Drop for Guard {
     }
 }
 
+#[derive(Clone)]
+struct InternalState {
+    camera: Arc<Mutex<CallbackCamera>>,
+    receiver: Arc<Receiver<Vec<u8>>>,
+}
+
+impl InternalState {
+    fn new(camera: CallbackCamera, receiver: Arc<Receiver<Vec<u8>>>) -> Self {
+        Self {
+            camera: Arc::new(Mutex::new(camera)),
+            receiver,
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -276,19 +302,81 @@ async fn main() -> Result<(), Error> {
         .with_max_level(LevelFilter::INFO)
         .init();
 
+    // Command line parser.
+    let cli = Cli::parse();
+
     // This initialization is necessary only on MacOS, but we are also going
     // to use this call to verify if everything went well.
     nokhwa::nokhwa_initialize(|granted| {
         if granted {
-            info!("Nokhwa initalized correctly.");
+            info!("Nokhwa initialized correctly.");
         } else {
             info!("Nokhwa not initialized correctly. Exiting the process.");
             std::process::exit(1);
         }
     });
 
-    // Command line parser.
-    let cli = Cli::parse();
+    // Retrieve native API camera backend
+    let camera_backend =
+        native_api_backend().ok_or(startup_error("No camera backend found at server startup"))?;
+
+    // Retrieve all cameras present on a system
+    let cameras = query(camera_backend).map_err(|e| {
+        startup_error(format!(
+            "The backend cannot find any camera at server startup: {e}"
+        ))
+    })?;
+
+    // Retrieve first camera present in the system
+    let first_camera = cameras.first().ok_or(startup_error(
+        "No cameras found in the system at server startup",
+    ))?;
+
+    // Create channels to get data from camera thread.
+    let (sender, receiver) = flume::unbounded();
+    let (sender, receiver) = (Arc::new(sender), Arc::new(receiver));
+
+    // Retrieve the first camera on system. If no index has been found,
+    // stops the server and return an error. The default requested format
+    // is being used.
+    let sender_clone = sender.clone();
+    let camera = CallbackCamera::new(
+        first_camera.index().clone(),
+        RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
+        move |buf| {
+            // Decode the frame and save its content into an image buffer
+            // TODO: Show the error
+            let decoded_frame = buf
+                .decode_image::<RgbAFormat>()
+                .expect("Camera thread: Error decoding the frame!");
+
+            info!(
+                "Decoded frame: {}x{} {}",
+                decoded_frame.width(),
+                decoded_frame.height(),
+                decoded_frame.len()
+            );
+
+            // Convert the image buffer into a `png` image
+            // TODO: Show the error
+            let mut cursor = Cursor::new(Vec::new());
+            decoded_frame
+                .write_to(&mut cursor, ImageFormat::Png)
+                .expect("Camera thread: Error in converting the image buffer into `png`");
+
+            // Retrieve raw data consuming the cursor
+            let raw_data = cursor.into_inner();
+            let raw_data_len = raw_data.len();
+
+            info!("Image size: {} bytes", raw_data_len);
+
+            // TODO: Show the error
+            sender_clone
+                .send(raw_data)
+                .expect("Camera thread: Error sending final image!");
+        },
+    )
+    .map_err(|e| startup_error(format!("Error creating the camera thread at startup: {e}")))?;
 
     // Route to view all available cameras.
     let view_cameras_route =
@@ -340,10 +428,10 @@ async fn main() -> Result<(), Error> {
     );
 
     // A camera device which is going to be run on the server.
-    let device = Device::new()
+    let device = Device::with_state(InternalState::new(camera, receiver))
         .main_route("/camera")
         .add_action(serial_stateless(view_cameras_route, view_available_cameras))
-        .add_action(serial_stateless(camera_data_route, camera_data))
+        .add_action(serial_stateful(camera_data_route, camera_data))
         .add_action(stream_stateless(screenshot_none_route, screenshot_none))
         .add_action(stream_stateless(
             screenshot_absolute_resolution_route,
