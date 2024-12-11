@@ -4,7 +4,7 @@ use std::io::Cursor;
 use ascot_axum::actions::stream::StreamPayload;
 use ascot_axum::actions::ActionError;
 
-use ascot_axum::extract::{Json, Path};
+use ascot_axum::extract::{Json, State};
 use ascot_axum::header;
 
 use image::ImageFormat;
@@ -24,26 +24,27 @@ use serde::Deserialize;
 // Tracing library.
 use tracing::info;
 
-use crate::camera_error;
+use crate::{camera_error, InternalState};
 
-fn run_camera_screenshot(
-    camera_index: u32,
-    format: RequestedFormat,
+async fn run_camera_screenshot(
+    state: InternalState,
+    format: RequestedFormat<'_>,
     suffix_filename: &str,
 ) -> Result<StreamPayload, ActionError> {
-    // Create camera
-    let mut camera = Camera::new(CameraIndex::Index(camera_index), format)
-        .map_err(|e| camera_error(format!("Error in retrieving camera {camera_index}: {e}")))?;
+    let mut camera = state.camera.lock().await;
+    let camera_index = camera.index().clone();
 
     // Open camera stream.
     camera
         .open_stream()
         .map_err(|e| camera_error(format!("Error in opening a stream for {camera_index}: {e}")))?;
 
-    // Retrieve camera frame as data buffer.
-    let frame = camera
-        .frame()
-        .map_err(|e| camera_error(format!("Error in getting a frame for {camera_index}: {e}")))?;
+    // Retrieve image as a png image
+    let buffer = state.receiver.recv().map_err(|e| {
+        camera_error(format!(
+            "Error in retrieving a frame for {camera_index}: {e}"
+        ))
+    })?;
 
     // Stop camera stream.
     camera.stop_stream().map_err(|e| {
@@ -52,7 +53,7 @@ fn run_camera_screenshot(
         ))
     })?;
 
-    info!("Capture camera screenshot of size {}", frame.buffer().len());
+    /*info!("Capture camera screenshot of size {}", frame.buffer().len());
 
     // Decode the frame and save its content into an image buffer
     let decoded_frame = frame
@@ -80,88 +81,92 @@ fn run_camera_screenshot(
     let raw_data = cursor.into_inner();
     let raw_data_len = raw_data.len();
 
-    info!("Image size {}", raw_data_len);
+    info!("Image size {}", raw_data_len);*/
 
     let headers = [
         (header::CONTENT_TYPE, "image/png"),
-        (header::CONTENT_LENGTH, &format!("{}", raw_data_len)),
+        (header::CONTENT_LENGTH, &format!("{}", buffer.len())),
         (
             header::CONTENT_DISPOSITION,
             &format!("attachment; filename=\"screenshot-{suffix_filename}.png\""),
         ),
     ];
 
-    Ok(StreamPayload::new(headers, raw_data))
+    Ok(StreamPayload::new(headers, buffer))
 }
 
 pub(crate) async fn screenshot_none(
-    Path(camera_index): Path<u32>,
+    State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
-        camera_index,
+        state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
         "none",
     )
+    .await
 }
 
 pub(crate) async fn screenshot_absolute_resolution(
-    Path(camera_index): Path<u32>,
+    State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
-        camera_index,
+        state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
         "absolute-resolution",
     )
+    .await
 }
 
 pub(crate) async fn screenshot_absolute_framerate(
-    Path(camera_index): Path<u32>,
+    State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
-        camera_index,
+        state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
         "absolute-framerate",
     )
+    .await
 }
 
 #[derive(Deserialize)]
 pub(crate) struct CameraResolution {
-    camera_index: u32,
     x: u32,
     y: u32,
 }
 
 pub(crate) async fn screenshot_highest_resolution(
+    State(state): State<InternalState>,
     Json(inputs): Json<CameraResolution>,
 ) -> Result<StreamPayload, ActionError> {
     let resolution = Resolution::new(inputs.x, inputs.y);
 
     run_camera_screenshot(
-        inputs.camera_index,
+        state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(resolution)),
         "highest-resolution",
     )
+    .await
 }
 
 #[derive(Deserialize)]
 pub(crate) struct CameraFramerate {
-    camera_index: u32,
     fps: u32,
 }
 
 pub(crate) async fn screenshot_highest_framerate(
+    State(state): State<InternalState>,
     Json(inputs): Json<CameraFramerate>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
-        inputs.camera_index,
+        state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestFrameRate(inputs.fps)),
         "highest-framerate",
     )
+    .await
 }
 
 #[derive(Deserialize)]
 pub(crate) struct CameraInputs {
-    camera_index: u32,
     x: u32,
     y: u32,
     fps: u32,
@@ -169,38 +174,39 @@ pub(crate) struct CameraInputs {
 }
 
 #[inline]
-fn camera_format(inputs: CameraInputs) -> Result<(u32, CameraFormat), ActionError> {
-    let fourcc = inputs.fourcc.parse::<FrameFormat>().map_err(|e| {
-        camera_error(format!(
-            "Wrong fourcc value for camera {}: {e}",
-            inputs.camera_index
-        ))
-    })?;
+fn camera_format(inputs: CameraInputs) -> Result<CameraFormat, ActionError> {
+    let fourcc = inputs
+        .fourcc
+        .parse::<FrameFormat>()
+        .map_err(|e| camera_error(format!("Wrong fourcc value: {e}",)))?;
     let resolution = Resolution::new(inputs.x, inputs.y);
-    let camera_format = CameraFormat::new(resolution, fourcc, inputs.fps);
-    Ok((inputs.camera_index, camera_format))
+    Ok(CameraFormat::new(resolution, fourcc, inputs.fps))
 }
 
 pub(crate) async fn screenshot_exact(
+    State(state): State<InternalState>,
     Json(inputs): Json<CameraInputs>,
 ) -> Result<StreamPayload, ActionError> {
-    let (camera_index, camera_format) = camera_format(inputs)?;
+    let camera_format = camera_format(inputs)?;
 
     run_camera_screenshot(
-        camera_index,
+        state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(camera_format)),
         "exact",
     )
+    .await
 }
 
 pub(crate) async fn screenshot_closest(
+    State(state): State<InternalState>,
     Json(inputs): Json<CameraInputs>,
 ) -> Result<StreamPayload, ActionError> {
-    let (camera_index, camera_format) = camera_format(inputs)?;
+    let camera_format = camera_format(inputs)?;
 
     run_camera_screenshot(
-        camera_index,
+        state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(camera_format)),
         "closest",
     )
+    .await
 }
