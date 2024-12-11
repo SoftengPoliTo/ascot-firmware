@@ -3,7 +3,6 @@ mod screenshot;
 mod stream;
 
 use std::borrow::Cow;
-use std::io::Cursor;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 
@@ -26,12 +25,7 @@ use async_lock::Mutex;
 use clap::Parser;
 
 // Nokhwa library
-use nokhwa::{
-    native_api_backend,
-    pixel_format::{RgbAFormat, RgbFormat},
-    query,
-    utils::{CameraIndex, RequestedFormat, RequestedFormatType},
-};
+use nokhwa::{native_api_backend, query, utils::CameraIndex};
 
 // Tracing library.
 use tracing::info;
@@ -40,9 +34,8 @@ use tracing_subscriber::filter::LevelFilter;
 use crate::info::{camera_info, view_available_cameras};
 
 use crate::screenshot::{
-    /*screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_closest,
+    screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_closest,
     screenshot_exact, screenshot_highest_framerate, screenshot_highest_resolution,
-    */
     screenshot_random,
 };
 
@@ -183,28 +176,28 @@ async fn main() -> Result<(), Error> {
         .main_route("/camera")
         .add_action(serial_stateless(view_cameras_route, view_available_cameras))
         .add_action(serial_stateful(camera_info_route, camera_info))
-        .add_action(stream_stateful(screenshot_random_route, screenshot_random));
-    /*.add_action(stream_stateful(
-        screenshot_absolute_resolution_route,
-        screenshot_absolute_resolution,
-    ))
-    .add_action(stream_stateful(
-        screenshot_absolute_framerate_route,
-        screenshot_absolute_framerate,
-    ))
-    .add_action(stream_stateful(
-        screenshot_highest_resolution_route,
-        screenshot_highest_resolution,
-    ))
-    .add_action(stream_stateful(
-        screenshot_highest_framerate_route,
-        screenshot_highest_framerate,
-    ))
-    .add_action(stream_stateful(screenshot_exact_route, screenshot_exact))
-    .add_action(stream_stateful(
-        screenshot_closest_route,
-        screenshot_closest,
-    ));*/
+        .add_action(stream_stateful(screenshot_random_route, screenshot_random))
+        .add_action(stream_stateful(
+            screenshot_absolute_resolution_route,
+            screenshot_absolute_resolution,
+        ))
+        .add_action(stream_stateful(
+            screenshot_absolute_framerate_route,
+            screenshot_absolute_framerate,
+        ))
+        .add_action(stream_stateful(
+            screenshot_highest_resolution_route,
+            screenshot_highest_resolution,
+        ))
+        .add_action(stream_stateful(
+            screenshot_highest_framerate_route,
+            screenshot_highest_framerate,
+        ))
+        .add_action(stream_stateful(screenshot_exact_route, screenshot_exact))
+        .add_action(stream_stateful(
+            screenshot_closest_route,
+            screenshot_closest,
+        ));
 
     // Run a discovery service and the device on the server.
     AscotServer::new(device)

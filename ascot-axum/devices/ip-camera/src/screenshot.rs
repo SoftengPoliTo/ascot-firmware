@@ -1,5 +1,4 @@
 use std::io::Cursor;
-use std::sync::Arc;
 
 // Ascot axum.
 use ascot_axum::actions::stream::StreamPayload;
@@ -8,17 +7,13 @@ use ascot_axum::actions::ActionError;
 use ascot_axum::extract::{Json, State};
 use ascot_axum::header;
 
-use flume::Receiver;
-
 use image::ImageFormat;
 
 // Nokhwa library
 use nokhwa::{
     pixel_format::{RgbAFormat, RgbFormat},
-    utils::{
-        CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
-    },
-    Buffer, CallbackCamera, Camera,
+    utils::{CameraFormat, FrameFormat, RequestedFormat, RequestedFormatType, Resolution},
+    Camera,
 };
 
 // Serde library.
@@ -29,11 +24,12 @@ use tracing::info;
 
 use crate::{camera_error, InternalState};
 
-fn run_camera_screenshot(
-    camera_index: CameraIndex,
-    format: RequestedFormat,
-    suffix_filename: &str,
+async fn run_camera_screenshot(
+    state: InternalState,
+    format: RequestedFormat<'_>,
 ) -> Result<StreamPayload, ActionError> {
+    let camera_index = state.camera.lock().await;
+
     let mut camera = Camera::new(camera_index.clone(), format).map_err(|e| {
         camera_error(format!(
             "Error in creating a camera with index {camera_index}: {e}"
@@ -102,22 +98,19 @@ fn run_camera_screenshot(
 pub(crate) async fn screenshot_random(
     State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
-    let camera_index = state.camera.lock().await;
-
     run_camera_screenshot(
-        camera_index.clone(),
+        state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
-        "none",
     )
+    .await
 }
 
-/*pub(crate) async fn screenshot_absolute_resolution(
+pub(crate) async fn screenshot_absolute_resolution(
     State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
         state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
-        "absolute-resolution",
     )
     .await
 }
@@ -128,7 +121,6 @@ pub(crate) async fn screenshot_absolute_framerate(
     run_camera_screenshot(
         state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
-        "absolute-framerate",
     )
     .await
 }
@@ -148,7 +140,6 @@ pub(crate) async fn screenshot_highest_resolution(
     run_camera_screenshot(
         state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(resolution)),
-        "highest-resolution",
     )
     .await
 }
@@ -165,7 +156,6 @@ pub(crate) async fn screenshot_highest_framerate(
     run_camera_screenshot(
         state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestFrameRate(inputs.fps)),
-        "highest-framerate",
     )
     .await
 }
@@ -197,7 +187,6 @@ pub(crate) async fn screenshot_exact(
     run_camera_screenshot(
         state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(camera_format)),
-        "exact",
     )
     .await
 }
@@ -211,7 +200,6 @@ pub(crate) async fn screenshot_closest(
     run_camera_screenshot(
         state,
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(camera_format)),
-        "closest",
     )
     .await
-}*/
+}
