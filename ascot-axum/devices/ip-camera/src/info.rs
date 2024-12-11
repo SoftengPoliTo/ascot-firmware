@@ -5,8 +5,13 @@ use ascot_axum::extract::State;
 
 // Nokhwa library
 use nokhwa::{
+    pixel_format::RgbFormat,
     query,
-    utils::{frame_formats, ApiBackend, CameraIndex, CameraInfo, FrameFormat, Resolution},
+    utils::{
+        frame_formats, ApiBackend, CameraIndex, CameraInfo, FrameFormat, RequestedFormat,
+        RequestedFormatType, Resolution,
+    },
+    Camera,
 };
 
 use serde::Serialize;
@@ -58,8 +63,17 @@ pub(crate) struct FormatData {
 pub(crate) async fn camera_info(
     State(state): State<InternalState>,
 ) -> Result<SerialPayload<CameraDataResponse>, ActionError> {
-    let mut camera = state.camera.lock().await;
-    let camera_index = camera.index().clone();
+    let camera_index = state.camera.lock().await;
+
+    let mut camera = Camera::new(
+        camera_index.clone(),
+        RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
+    )
+    .map_err(|e| {
+        camera_error(format!(
+            "Error in creating a camera with index {camera_index}: {e}"
+        ))
+    })?;
 
     // Get controls for a camera
     let controls = camera.camera_controls().map_err(|e| {
@@ -116,7 +130,7 @@ pub(crate) async fn camera_info(
         .collect::<Vec<CameraFrameFormat>>();
 
     Ok(SerialPayload::new(CameraDataResponse {
-        camera_index,
+        camera_index: camera_index.clone(),
         controls,
         frame_formats,
     }))

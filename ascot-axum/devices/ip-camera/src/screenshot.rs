@@ -1,4 +1,5 @@
 use std::io::Cursor;
+use std::sync::Arc;
 
 // Ascot axum.
 use ascot_axum::actions::stream::StreamPayload;
@@ -7,15 +8,17 @@ use ascot_axum::actions::ActionError;
 use ascot_axum::extract::{Json, State};
 use ascot_axum::header;
 
+use flume::Receiver;
+
 use image::ImageFormat;
 
 // Nokhwa library
 use nokhwa::{
-    pixel_format::RgbFormat,
+    pixel_format::{RgbAFormat, RgbFormat},
     utils::{
         CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
     },
-    Camera,
+    Buffer, CallbackCamera, Camera,
 };
 
 // Serde library.
@@ -26,49 +29,43 @@ use tracing::info;
 
 use crate::{camera_error, InternalState};
 
-async fn run_camera_screenshot(
-    state: InternalState,
-    format: RequestedFormat<'_>,
+fn run_camera_screenshot(
+    camera_index: CameraIndex,
+    format: RequestedFormat,
     suffix_filename: &str,
 ) -> Result<StreamPayload, ActionError> {
-    let mut camera = state.camera.lock().await;
-    let camera_index = camera.index().clone();
-
-    // Set camera format
-    camera.set_camera_requset(format).map_err(|e| {
+    let mut camera = Camera::new(camera_index.clone(), format).map_err(|e| {
         camera_error(format!(
-            "Error in setting a request format for camera with index {camera_index}: {e}"
+            "Error in creating a camera with index {camera_index}: {e}"
         ))
     })?;
 
-    // Open camera stream.
+    // Open camera stream
     camera.open_stream().map_err(|e| {
         camera_error(format!(
-            "Error in opening a stream for camera with index {camera_index}: {e}"
+            "Error in opening the stream camera with index {camera_index}: {e}"
         ))
     })?;
 
-    // Retrieve image as a png image
-    let buffer = state.receiver.recv().map_err(|e| {
+    // Retrieve a camera frame
+    let frame = camera.frame().map_err(|e| {
         camera_error(format!(
             "Error in retrieving a frame for camera with index {camera_index}: {e}"
         ))
     })?;
 
-    {
-        // Stop camera stream.
-        camera.stop_stream().map_err(|e| {
-            camera_error(format!(
-                "Error in stopping a stream for camera with index {camera_index}: {e}"
-            ))
-        })?;
-    }
+    // Stop camera stream.
+    camera.stop_stream().map_err(|e| {
+        camera_error(format!(
+            "Error in stopping a stream for camera with index {camera_index}: {e}"
+        ))
+    })?;
 
-    /*info!("Capture camera screenshot of size {}", frame.buffer().len());
+    info!("Capture camera screenshot of size {}", frame.buffer().len());
 
     // Decode the frame and save its content into an image buffer
     let decoded_frame = frame
-        .decode_image::<RgbFormat>()
+        .decode_image::<RgbAFormat>()
         .map_err(|e| camera_error(format!("Error in decoding a frame for {camera_index}: {e}")))?;
 
     info!(
@@ -92,32 +89,29 @@ async fn run_camera_screenshot(
     let raw_data = cursor.into_inner();
     let raw_data_len = raw_data.len();
 
-    info!("Image size {}", raw_data_len);*/
+    info!("Image size {}", raw_data_len);
 
     let headers = [
         (header::CONTENT_TYPE, "image/png"),
-        (header::CONTENT_LENGTH, &format!("{}", buffer.len())),
-        (
-            header::CONTENT_DISPOSITION,
-            &format!("attachment; filename=\"screenshot-{suffix_filename}.png\""),
-        ),
+        (header::CONTENT_LENGTH, &format!("{}", raw_data_len)),
     ];
 
-    Ok(StreamPayload::new(headers, buffer))
+    Ok(StreamPayload::new(headers, raw_data))
 }
 
 pub(crate) async fn screenshot_random(
     State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
+    let camera_index = state.camera.lock().await;
+
     run_camera_screenshot(
-        state,
+        camera_index.clone(),
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
         "none",
     )
-    .await
 }
 
-pub(crate) async fn screenshot_absolute_resolution(
+/*pub(crate) async fn screenshot_absolute_resolution(
     State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
@@ -220,4 +214,4 @@ pub(crate) async fn screenshot_closest(
         "closest",
     )
     .await
-}
+}*/

@@ -25,19 +25,12 @@ use async_lock::Mutex;
 // Command line library
 use clap::Parser;
 
-// Flume
-use flume::Receiver;
-
-// Image buffer
-use image::ImageFormat;
-
 // Nokhwa library
 use nokhwa::{
     native_api_backend,
     pixel_format::{RgbAFormat, RgbFormat},
     query,
-    threaded::CallbackCamera,
-    utils::{RequestedFormat, RequestedFormatType},
+    utils::{CameraIndex, RequestedFormat, RequestedFormatType},
 };
 
 // Tracing library.
@@ -47,8 +40,9 @@ use tracing_subscriber::filter::LevelFilter;
 use crate::info::{camera_info, view_available_cameras};
 
 use crate::screenshot::{
-    screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_closest,
+    /*screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_closest,
     screenshot_exact, screenshot_highest_framerate, screenshot_highest_resolution,
+    */
     screenshot_random,
 };
 
@@ -62,15 +56,13 @@ fn startup_error(error: impl Into<Cow<'static, str>>) -> Error {
 
 #[derive(Clone)]
 struct InternalState {
-    camera: Arc<Mutex<CallbackCamera>>,
-    receiver: Arc<Receiver<Vec<u8>>>,
+    camera: Arc<Mutex<CameraIndex>>,
 }
 
 impl InternalState {
-    fn new(camera: CallbackCamera, receiver: Arc<Receiver<Vec<u8>>>) -> Self {
+    fn new(camera: CameraIndex) -> Self {
         Self {
             camera: Arc::new(Mutex::new(camera)),
-            receiver,
         }
     }
 }
@@ -138,52 +130,6 @@ async fn main() -> Result<(), Error> {
         "No cameras found in the system at server startup",
     ))?;
 
-    // Create channels to get data from camera thread.
-    let (sender, receiver) = flume::unbounded();
-    let (sender, receiver) = (Arc::new(sender), Arc::new(receiver));
-
-    // Retrieve the first camera on system. If no index has been found,
-    // stops the server and return an error. The default requested format
-    // is being used.
-    let sender_clone = sender.clone();
-    let camera = CallbackCamera::new(
-        first_camera.index().clone(),
-        RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
-        move |buf| {
-            // Decode the frame and save its content into an image buffer
-            // TODO: Show the error
-            let decoded_frame = buf
-                .decode_image::<RgbAFormat>()
-                .expect("Camera thread: Error decoding the frame!");
-
-            info!(
-                "Decoded frame: {}x{} {}",
-                decoded_frame.width(),
-                decoded_frame.height(),
-                decoded_frame.len()
-            );
-
-            // Convert the image buffer into a `png` image
-            // TODO: Show the error
-            let mut cursor = Cursor::new(Vec::new());
-            decoded_frame
-                .write_to(&mut cursor, ImageFormat::Png)
-                .expect("Camera thread: Error in converting the image buffer into `png`");
-
-            // Retrieve raw data consuming the cursor
-            let raw_data = cursor.into_inner();
-            let raw_data_len = raw_data.len();
-
-            info!("Image size: {} bytes", raw_data_len);
-
-            // TODO: Show the error
-            sender_clone
-                .send(raw_data)
-                .expect("Camera thread: Error sending final image!");
-        },
-    )
-    .map_err(|e| startup_error(format!("Error creating the camera thread at startup: {e}")))?;
-
     // Route to view all available cameras.
     let view_cameras_route =
         RouteHazards::no_hazards(Route::get("/view-all").description("View all system cameras."));
@@ -233,32 +179,32 @@ async fn main() -> Result<(), Error> {
     );
 
     // A camera device which is going to be run on the server.
-    let device = Device::with_state(InternalState::new(camera, receiver))
+    let device = Device::with_state(InternalState::new(first_camera.index().clone()))
         .main_route("/camera")
         .add_action(serial_stateless(view_cameras_route, view_available_cameras))
         .add_action(serial_stateful(camera_info_route, camera_info))
-        .add_action(stream_stateful(screenshot_random_route, screenshot_random))
-        .add_action(stream_stateful(
-            screenshot_absolute_resolution_route,
-            screenshot_absolute_resolution,
-        ))
-        .add_action(stream_stateful(
-            screenshot_absolute_framerate_route,
-            screenshot_absolute_framerate,
-        ))
-        .add_action(stream_stateful(
-            screenshot_highest_resolution_route,
-            screenshot_highest_resolution,
-        ))
-        .add_action(stream_stateful(
-            screenshot_highest_framerate_route,
-            screenshot_highest_framerate,
-        ))
-        .add_action(stream_stateful(screenshot_exact_route, screenshot_exact))
-        .add_action(stream_stateful(
-            screenshot_closest_route,
-            screenshot_closest,
-        ));
+        .add_action(stream_stateful(screenshot_random_route, screenshot_random));
+    /*.add_action(stream_stateful(
+        screenshot_absolute_resolution_route,
+        screenshot_absolute_resolution,
+    ))
+    .add_action(stream_stateful(
+        screenshot_absolute_framerate_route,
+        screenshot_absolute_framerate,
+    ))
+    .add_action(stream_stateful(
+        screenshot_highest_resolution_route,
+        screenshot_highest_resolution,
+    ))
+    .add_action(stream_stateful(
+        screenshot_highest_framerate_route,
+        screenshot_highest_framerate,
+    ))
+    .add_action(stream_stateful(screenshot_exact_route, screenshot_exact))
+    .add_action(stream_stateful(
+        screenshot_closest_route,
+        screenshot_closest,
+    ));*/
 
     // Run a discovery service and the device on the server.
     AscotServer::new(device)
