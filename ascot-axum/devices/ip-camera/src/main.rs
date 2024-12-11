@@ -48,7 +48,8 @@ use crate::info::{camera_info, view_available_cameras};
 
 use crate::screenshot::{
     screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_closest,
-    screenshot_exact, screenshot_highest_framerate, screenshot_highest_resolution, screenshot_none,
+    screenshot_exact, screenshot_highest_framerate, screenshot_highest_resolution,
+    screenshot_random,
 };
 
 fn camera_error(error: impl AsRef<str>) -> ActionError {
@@ -191,21 +192,20 @@ async fn main() -> Result<(), Error> {
     let camera_info_route =
         RouteHazards::no_hazards(Route::get("/info").description("View current camera data."));
 
-    // Route to view screenshot with no format.
-    let screenshot_none_route = RouteHazards::no_hazards(
-        Route::get("/:camera_index/screenshot-none")
-            .description("Screenshot from a camera with no format."),
+    // Route to take a screenshot with a random format.
+    let screenshot_random_route = RouteHazards::no_hazards(
+        Route::get("/screenshot-random").description("Screenshot with a random camera format."),
     );
 
     // Route to view screenshot with absolute resolution.
     let screenshot_absolute_resolution_route = RouteHazards::no_hazards(
-        Route::get("/:camera_index/screenshot-absolute-resolution")
+        Route::get("/screenshot-absolute-resolution")
             .description("Screenshot from a camera with absolute resolution."),
     );
 
     // Route to view screenshot with absolute framerate.
     let screenshot_absolute_framerate_route = RouteHazards::no_hazards(
-        Route::get("/:camera_index/screenshot-absolute-framerate")
+        Route::get("/screenshot-absolute-framerate")
             .description("Screenshot from a camera with absolute framerate."),
     );
 
@@ -237,7 +237,7 @@ async fn main() -> Result<(), Error> {
         .main_route("/camera")
         .add_action(serial_stateless(view_cameras_route, view_available_cameras))
         .add_action(serial_stateful(camera_info_route, camera_info))
-        .add_action(stream_stateful(screenshot_none_route, screenshot_none))
+        .add_action(stream_stateful(screenshot_random_route, screenshot_random))
         .add_action(stream_stateful(
             screenshot_absolute_resolution_route,
             screenshot_absolute_resolution,

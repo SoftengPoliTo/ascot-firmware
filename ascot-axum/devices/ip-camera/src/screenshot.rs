@@ -34,24 +34,35 @@ async fn run_camera_screenshot(
     let mut camera = state.camera.lock().await;
     let camera_index = camera.index().clone();
 
+    // Set camera format
+    camera.set_camera_requset(format).map_err(|e| {
+        camera_error(format!(
+            "Error in setting a request format for camera with index {camera_index}: {e}"
+        ))
+    })?;
+
     // Open camera stream.
-    camera
-        .open_stream()
-        .map_err(|e| camera_error(format!("Error in opening a stream for {camera_index}: {e}")))?;
+    camera.open_stream().map_err(|e| {
+        camera_error(format!(
+            "Error in opening a stream for camera with index {camera_index}: {e}"
+        ))
+    })?;
 
     // Retrieve image as a png image
     let buffer = state.receiver.recv().map_err(|e| {
         camera_error(format!(
-            "Error in retrieving a frame for {camera_index}: {e}"
+            "Error in retrieving a frame for camera with index {camera_index}: {e}"
         ))
     })?;
 
-    // Stop camera stream.
-    camera.stop_stream().map_err(|e| {
-        camera_error(format!(
-            "Error in stopping a stream for {camera_index}: {e}"
-        ))
-    })?;
+    {
+        // Stop camera stream.
+        camera.stop_stream().map_err(|e| {
+            camera_error(format!(
+                "Error in stopping a stream for camera with index {camera_index}: {e}"
+            ))
+        })?;
+    }
 
     /*info!("Capture camera screenshot of size {}", frame.buffer().len());
 
@@ -95,7 +106,7 @@ async fn run_camera_screenshot(
     Ok(StreamPayload::new(headers, buffer))
 }
 
-pub(crate) async fn screenshot_none(
+pub(crate) async fn screenshot_random(
     State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
     run_camera_screenshot(
