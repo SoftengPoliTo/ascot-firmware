@@ -16,7 +16,9 @@ use tracing::info;
 use crate::{camera_error, InternalState};
 
 #[derive(Serialize)]
-pub(crate) struct ViewCamerasResponse(Vec<CameraInfo>);
+pub(crate) struct ViewCamerasResponse {
+    cameras: Vec<CameraInfo>,
+}
 
 // Not a computationally intensive route, just some matches.
 pub(crate) async fn view_available_cameras(
@@ -31,7 +33,7 @@ pub(crate) async fn view_available_cameras(
         info!("{camera}");
     }
 
-    Ok(SerialPayload::new(ViewCamerasResponse(cameras)))
+    Ok(SerialPayload::new(ViewCamerasResponse { cameras }))
 }
 
 #[derive(Serialize)]
