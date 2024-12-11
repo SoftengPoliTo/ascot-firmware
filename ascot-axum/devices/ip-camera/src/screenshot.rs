@@ -11,14 +11,11 @@ use image::ImageFormat;
 
 // Nokhwa library
 use nokhwa::{
-    native_api_backend,
-    pixel_format::{RgbAFormat, RgbFormat},
-    query,
+    pixel_format::RgbFormat,
     utils::{
-        frame_formats, yuyv422_predicted_size, ApiBackend, CameraFormat, CameraIndex, CameraInfo,
-        FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
+        CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
     },
-    Buffer, Camera, NokhwaError,
+    Camera,
 };
 
 // Serde library.
@@ -96,11 +93,6 @@ fn run_camera_screenshot(
 
     Ok(StreamPayload::new(headers, raw_data))
 }
-
-/*#[derive(Deserialize)]
-pub(crate) struct CameraInputIndex {
-    camera_index: u32,
-}*/
 
 pub(crate) async fn screenshot_none(
     Path(camera_index): Path<u32>,
