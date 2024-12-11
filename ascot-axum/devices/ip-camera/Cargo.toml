@@ -17,9 +17,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Webcam framework
-#
-# To overcome mozjpeg undefined behaviour and build this dependency.
-nokhwa = { version = "0.10.4", features = ["input-native", "serialize"], git = "https://github.com/kendfrey/nokhwa.git", branch = "0.10" }
+nokhwa = { version = "0.10.7", features = ["input-native", "serialize"] }
 
 # Image
 [dependencies.image]
