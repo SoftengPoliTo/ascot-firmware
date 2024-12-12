@@ -81,9 +81,7 @@ async fn run_camera_screenshot(
             ))
         })?;
 
-    // Retrieve raw data consuming the cursor
-    let raw_data = cursor.into_inner();
-    let raw_data_len = raw_data.len();
+    let raw_data_len = cursor.get_ref().len();
 
     info!("Image size {}", raw_data_len);
 
@@ -92,7 +90,7 @@ async fn run_camera_screenshot(
         (header::CONTENT_LENGTH, &format!("{}", raw_data_len)),
     ];
 
-    Ok(StreamPayload::from_stream(headers, raw_data))
+    Ok(StreamPayload::from_headers_reader(headers, cursor))
 }
 
 pub(crate) async fn screenshot_random(

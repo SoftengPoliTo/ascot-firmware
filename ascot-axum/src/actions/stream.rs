@@ -23,7 +23,7 @@ pub struct StreamPayload(Response);
 impl StreamPayload {
     /// Creates a new [`StreamPayload`] from headers and stream.
     #[inline]
-    pub fn from_headers_and_stream<const N: usize, S>(
+    pub fn from_headers_stream<const N: usize, S>(
         headers: [(HeaderName, &str); N],
         stream: S,
     ) -> Self
@@ -48,7 +48,7 @@ impl StreamPayload {
 
     /// Creates a new [`StreamPayload`] from headers and reader.
     #[inline]
-    pub fn from_headers_and_reader<const N: usize, R>(
+    pub fn from_headers_reader<const N: usize, R>(
         headers: [(HeaderName, &str); N],
         reader: R,
     ) -> Self
