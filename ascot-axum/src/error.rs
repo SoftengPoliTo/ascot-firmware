@@ -9,7 +9,7 @@ pub enum ErrorKind {
     NotFoundAddress,
     /// Serialize/Deserialize error.
     Serialization,
-    /// `Ascot` library error.
+    /// An `Ascot` library error.
     AscotLibrary,
     /// Light error.
     Light,
@@ -61,6 +61,12 @@ impl Error {
             kind,
             info: info.into(),
         }
+    }
+
+    /// Creates an [`Error`] for [`ErrorKind::External`] passing a specific
+    /// description.
+    pub fn external(info: impl Into<Cow<'static, str>>) -> Self {
+        Self::new(ErrorKind::External, info)
     }
 
     pub(crate) fn error(&self) -> String {

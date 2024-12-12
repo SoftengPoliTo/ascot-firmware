@@ -2,7 +2,6 @@ mod info;
 mod screenshot;
 mod stream;
 
-use std::borrow::Cow;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 
@@ -14,7 +13,7 @@ use ascot_axum::actions::serial::{serial_stateful, serial_stateless};
 use ascot_axum::actions::stream::stream_stateful;
 use ascot_axum::actions::ActionError;
 use ascot_axum::device::Device;
-use ascot_axum::error::{Error, ErrorKind};
+use ascot_axum::error::Error;
 use ascot_axum::server::AscotServer;
 use ascot_axum::service::ServiceConfig;
 
@@ -39,12 +38,40 @@ use crate::screenshot::{
     screenshot_random,
 };
 
-fn camera_error(error: impl AsRef<str>) -> ActionError {
-    ActionError::internal(error.as_ref())
+fn startup_error(error: &str) -> Error {
+    Error::external(format!("{error} at server startup"))
 }
 
-fn startup_error(error: impl Into<Cow<'static, str>>) -> Error {
-    Error::new(ErrorKind::External, error)
+fn startup_with_error(description: &str, error: impl std::error::Error) -> Error {
+    Error::external(format!("{description} at server startup: {error}"))
+}
+
+fn camera_index_error(
+    description: &str,
+    camera_index: &CameraIndex,
+    error: impl std::error::Error,
+) -> ActionError {
+    ActionError::internal(&format!("{description} with index {camera_index}: {error}"))
+}
+
+fn camera_error(description: &str, error: impl std::error::Error) -> ActionError {
+    ActionError::internal(&format!("{description}: {error}"))
+}
+
+fn thread_error(description: &str, camera_index: &CameraIndex) -> ActionError {
+    ActionError::internal(&format!(
+        "Camera thread -> {description} with index {camera_index}"
+    ))
+}
+
+fn thread_with_error(
+    description: &str,
+    camera_index: &CameraIndex,
+    error: impl std::error::Error,
+) -> ActionError {
+    ActionError::internal(&format!(
+        "Camera thread -> {description} with index {camera_index}: {error}"
+    ))
 }
 
 #[derive(Clone)]
@@ -108,20 +135,16 @@ async fn main() -> Result<(), Error> {
     });
 
     // Retrieve native API camera backend
-    let camera_backend =
-        native_api_backend().ok_or(startup_error("No camera backend found at server startup"))?;
+    let camera_backend = native_api_backend().ok_or(startup_error("No camera backend found"))?;
 
     // Retrieve all cameras present on a system
-    let cameras = query(camera_backend).map_err(|e| {
-        startup_error(format!(
-            "The backend cannot find any camera at server startup: {e}"
-        ))
-    })?;
+    let cameras = query(camera_backend)
+        .map_err(|e| startup_with_error("The backend cannot find any camera", e))?;
 
     // Retrieve first camera present in the system
-    let first_camera = cameras.first().ok_or(startup_error(
-        "No cameras found in the system at server startup",
-    ))?;
+    let first_camera = cameras
+        .first()
+        .ok_or(startup_error("No cameras found in the system"))?;
 
     // Route to view all available cameras.
     let view_cameras_route =

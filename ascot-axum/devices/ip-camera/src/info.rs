@@ -18,7 +18,7 @@ use serde::Serialize;
 
 use tracing::info;
 
-use crate::{camera_error, InternalState};
+use crate::{camera_error, camera_index_error, InternalState};
 
 #[derive(Serialize)]
 pub(crate) struct ViewCamerasResponse {
@@ -29,8 +29,7 @@ pub(crate) struct ViewCamerasResponse {
 pub(crate) async fn view_available_cameras(
 ) -> Result<SerialPayload<ViewCamerasResponse>, ActionError> {
     // Retrieve all cameras present on a system
-    let cameras =
-        query(ApiBackend::Auto).map_err(|e| camera_error(format!("No cameras found: {e}")))?;
+    let cameras = query(ApiBackend::Auto).map_err(|e| camera_error("No cameras found", e))?;
 
     info!("There are {} available cameras.", cameras.len());
 
@@ -63,26 +62,20 @@ pub(crate) struct FormatData {
 pub(crate) async fn camera_info(
     State(state): State<InternalState>,
 ) -> Result<SerialPayload<CameraDataResponse>, ActionError> {
-    let camera_index = state.camera.lock().await;
+    let index = state.camera.lock().await;
 
     let mut camera = Camera::new(
-        camera_index.clone(),
+        index.clone(),
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
     )
-    .map_err(|e| {
-        camera_error(format!(
-            "Error in creating a camera with index {camera_index}: {e}"
-        ))
-    })?;
+    .map_err(|e| camera_index_error("Impossible to create camera", &index, e))?;
 
     // Get controls for a camera
-    let controls = camera.camera_controls().map_err(|e| {
-        camera_error(format!(
-            "Error in retrieving controls for camera with index {camera_index}: {e}"
-        ))
-    })?;
+    let controls = camera
+        .camera_controls()
+        .map_err(|e| camera_index_error("Impossible to retrieve controls for camera", &index, e))?;
 
-    info!("Control for camera with index {camera_index}");
+    info!("Control for camera with index {index}");
 
     // Convert controls into strings.
     let controls = controls
@@ -93,7 +86,7 @@ pub(crate) async fn camera_info(
 
     // Iterate over frame formats.
     let frame_formats = frame_formats()
-        .into_iter()
+        .iter()
         .filter_map(|frame_format| {
             let frame_format = *frame_format;
 
@@ -103,7 +96,6 @@ pub(crate) async fn camera_info(
 
                 let mut formats = compatible
                     .into_iter()
-                    .map(|(resolution, fps)| (resolution, fps))
                     .collect::<Vec<(Resolution, Vec<u32>)>>();
 
                 // Sort formats by name
@@ -130,7 +122,7 @@ pub(crate) async fn camera_info(
         .collect::<Vec<CameraFrameFormat>>();
 
     Ok(SerialPayload::new(CameraDataResponse {
-        camera_index: camera_index.clone(),
+        camera_index: index.clone(),
         controls,
         frame_formats,
     }))

@@ -42,6 +42,7 @@ macro_rules! all_the_tuples {
 pub(super) use all_the_tuples;
 
 /// An error which might arise during the execution of an action on a device.
+#[derive(Debug)]
 pub struct ActionError(Response);
 
 impl ActionError {

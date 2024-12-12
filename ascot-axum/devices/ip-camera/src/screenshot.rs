@@ -12,9 +12,7 @@ use image::ImageFormat;
 // Nokhwa library
 use nokhwa::{
     pixel_format::{RgbAFormat, RgbFormat},
-    utils::{
-        CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
-    },
+    utils::{CameraFormat, FrameFormat, RequestedFormat, RequestedFormatType, Resolution},
     Camera,
 };
 
@@ -24,98 +22,93 @@ use serde::Deserialize;
 // Tracing library.
 use tracing::info;
 
-use crate::{camera_error, InternalState};
+use crate::{camera_error, camera_index_error, thread_error, thread_with_error, InternalState};
 
 async fn run_camera_screenshot(
     state: InternalState,
-    format: RequestedFormat<'_>,
+    format: RequestedFormat<'static>,
 ) -> Result<StreamPayload, ActionError> {
-    let camera_index = state.camera.lock().await;
+    let current_index = state.camera.lock().await;
+    let index = current_index.clone();
 
-    /*let (tx, rx) = tokio::sync::oneshot::channel();
+    let (tx, rx) = tokio::sync::oneshot::channel();
 
     rayon::spawn(move || {
-        // some potentially expensive work here, including serialization
-        let mut buf = Vec::with_capacity(16 * 4096);
-        loop {
-            // potentially expensive work here
-            // then write chunk of calculated data into buf
+        let mut camera = Camera::new(index.clone(), format)
+            .map_err(|e| thread_with_error("Impossible to create camera", &index, e))
+            .unwrap();
 
-            if buf.len() >= 16 * 4096 {
-                tx.send(std::mem::replace(&mut buf, Vec::with_capacity(16 * 4096)));
-            }
+        // Open camera stream
+        camera
+            .open_stream()
+            .map_err(|e| thread_with_error("Impossible to open a stream on camera", &index, e))
+            .unwrap();
+
+        // Discard at least 10 camera frame before sending the correct one.
+        for _ in 0..10 {
+            camera
+                .frame()
+                .map_err(|e| {
+                    thread_with_error("Impossible to retrieve a frame for camera", &index, e)
+                })
+                .unwrap();
         }
 
-        tx.send(buf);
-    });*/
+        // This also allows to focus in the lens.
+        let frame = camera
+            .frame()
+            .map_err(|e| thread_with_error("Impossible to retrieve a frame for camera", &index, e))
+            .unwrap();
 
-    let mut camera = Camera::new(camera_index.clone(), format).map_err(|e| {
-        camera_error(format!(
-            "Error in creating a camera with index {camera_index}: {e}"
-        ))
-    })?;
+        info!("Capture camera screenshot of size {}", frame.buffer().len());
 
-    // Open camera stream
-    camera.open_stream().map_err(|e| {
-        camera_error(format!(
-            "Error in opening the stream camera with index {camera_index}: {e}"
-        ))
-    })?;
+        // Stop camera stream.
+        camera
+            .stop_stream()
+            .map_err(|e| thread_with_error("Impossible to stop a stream for camera", &index, e))
+            .unwrap();
 
-    // Discard at least 30 camera frame before sending the correct one.
-    for _ in 0..30 {
-        camera.frame().map_err(|e| {
-            camera_error(format!(
-                "Error in retrieving a frame for camera with index {camera_index}: {e}"
-            ))
-        })?;
-    }
+        // Decode the frame and save its content into an image buffer
+        let decoded_frame = frame
+            .decode_image::<RgbAFormat>()
+            .map_err(|e| thread_with_error("Impossible to decode a frame for camera", &index, e))
+            .unwrap();
 
-    // This also allows to focus in the lens.
-    let frame = camera.frame().map_err(|e| {
-        camera_error(format!(
-            "Error in retrieving a frame for camera with index {camera_index}: {e}"
-        ))
-    })?;
+        info!(
+            "Decoded frame: {}x{} {}",
+            decoded_frame.width(),
+            decoded_frame.height(),
+            decoded_frame.len()
+        );
 
-    info!("Capture camera screenshot of size {}", frame.buffer().len());
+        // Convert the image buffer into a `png` image, and returns a bytes buffer
+        let mut bytes = Vec::new();
+        decoded_frame
+            .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
+            .map_err(|e| {
+                thread_with_error("Impossible to write a `png` image for camera", &index, e)
+            })
+            .unwrap();
 
-    // Stop camera stream.
-    camera.stop_stream().map_err(|e| {
-        camera_error(format!(
-            "Error in stopping a stream for camera with index {camera_index}: {e}"
-        ))
-    })?;
+        info!("Image size {}", bytes.len());
 
-    // Decode the frame and save its content into an image buffer
-    let decoded_frame = frame
-        .decode_image::<RgbAFormat>()
-        .map_err(|e| camera_error(format!("Error in decoding a frame for {camera_index}: {e}")))?;
-
-    info!(
-        "Decoded frame: {}x{} {}",
-        decoded_frame.width(),
-        decoded_frame.height(),
-        decoded_frame.len()
-    );
-
-    // Convert the image buffer into a `png` image, and returns a bytes buffer
-    let mut bytes: Vec<u8> = Vec::new();
-    decoded_frame
-        .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
-        .map_err(|e| {
-            camera_error(format!(
-                "Error in converting the image buffer into `png` for {camera_index}: {e}"
-            ))
-        })?;
-
-    info!("Image size {}", bytes.len());
+        tx.send(bytes)
+            .map_err(|_| thread_error("Impossible to send a `png` image for camera", &index))
+            .unwrap();
+    });
 
     let headers = [(header::CONTENT_TYPE, "image/png")];
+    let buf = rx.await.map_err(|e| {
+        camera_index_error(
+            "Impossible to retrieve the `png` image from thread for camera",
+            &current_index,
+            e,
+        )
+    })?;
 
     Ok(StreamPayload::from_headers_reader(
         headers,
-        Cursor::new(bytes),
+        Cursor::new(buf),
     ))
 }
 
@@ -192,12 +185,11 @@ pub(crate) struct CameraInputs {
     fourcc: String,
 }
 
-#[inline]
 fn camera_format(inputs: CameraInputs) -> Result<CameraFormat, ActionError> {
     let fourcc = inputs
         .fourcc
         .parse::<FrameFormat>()
-        .map_err(|e| camera_error(format!("Wrong fourcc value: {e}",)))?;
+        .map_err(|e| camera_error("Wrong fourcc value", e))?;
     let resolution = Resolution::new(inputs.x, inputs.y);
     Ok(CameraFormat::new(resolution, fourcc, inputs.fps))
 }
