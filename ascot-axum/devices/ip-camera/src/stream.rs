@@ -19,7 +19,7 @@ use tracing::info;
 
 use crate::{thread_error, thread_with_error, InternalState};
 
-pub(crate) async fn show_cameras_info(
+pub(crate) async fn show_camera_stream(
     State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
     let current_index = state.camera.lock().await;

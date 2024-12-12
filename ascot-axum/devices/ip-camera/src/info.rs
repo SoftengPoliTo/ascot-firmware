@@ -26,7 +26,7 @@ pub(crate) struct ViewCamerasResponse {
 }
 
 // Not a computationally intensive route, just some matches.
-pub(crate) async fn view_available_cameras(
+pub(crate) async fn show_available_cameras(
 ) -> Result<SerialPayload<ViewCamerasResponse>, ActionError> {
     // Retrieve all cameras present on a system
     let cameras = query(ApiBackend::Auto).map_err(|e| camera_error("No cameras found", e))?;
@@ -59,7 +59,7 @@ pub(crate) struct FormatData {
     fps: String,
 }
 
-pub(crate) async fn camera_info(
+pub(crate) async fn show_camera_info(
     State(state): State<InternalState>,
 ) -> Result<SerialPayload<CameraDataResponse>, ActionError> {
     let index = state.camera.lock().await;

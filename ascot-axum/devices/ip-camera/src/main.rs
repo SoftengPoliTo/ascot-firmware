@@ -30,13 +30,13 @@ use nokhwa::{native_api_backend, query, utils::CameraIndex};
 use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 
-use crate::info::{camera_info, view_available_cameras};
-
+use crate::info::{show_available_cameras, show_camera_info};
 use crate::screenshot::{
     screenshot_absolute_framerate, screenshot_absolute_resolution, screenshot_closest,
     screenshot_exact, screenshot_highest_framerate, screenshot_highest_resolution,
     screenshot_random,
 };
+use crate::stream::show_camera_stream;
 
 fn startup_error(error: &str) -> Error {
     Error::external(format!("{error} at server startup"))
@@ -150,9 +150,13 @@ async fn main() -> Result<(), Error> {
     let view_cameras_route =
         RouteHazards::no_hazards(Route::get("/view-all").description("View all system cameras."));
 
-    // Route to view the camera info.
+    // Route to view camera info.
     let camera_info_route =
         RouteHazards::no_hazards(Route::get("/info").description("View current camera data."));
+
+    // Route to view camera stream.
+    let camera_stream_route =
+        RouteHazards::no_hazards(Route::get("/stream").description("View camera stream."));
 
     // Route to take a screenshot with a random format.
     let screenshot_random_route = RouteHazards::no_hazards(
@@ -197,8 +201,9 @@ async fn main() -> Result<(), Error> {
     // A camera device which is going to be run on the server.
     let device = Device::with_state(InternalState::new(first_camera.index().clone()))
         .main_route("/camera")
-        .add_action(serial_stateless(view_cameras_route, view_available_cameras))
-        .add_action(serial_stateful(camera_info_route, camera_info))
+        .add_action(serial_stateless(view_cameras_route, show_available_cameras))
+        .add_action(serial_stateful(camera_info_route, show_camera_info))
+        .add_action(stream_stateful(camera_stream_route, show_camera_stream))
         .add_action(stream_stateful(screenshot_random_route, screenshot_random))
         .add_action(stream_stateful(
             screenshot_absolute_resolution_route,
