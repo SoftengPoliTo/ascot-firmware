@@ -12,7 +12,9 @@ use image::ImageFormat;
 // Nokhwa library
 use nokhwa::{
     pixel_format::{RgbAFormat, RgbFormat},
-    utils::{CameraFormat, FrameFormat, RequestedFormat, RequestedFormatType, Resolution},
+    utils::{
+        CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
+    },
     Camera,
 };
 
@@ -30,6 +32,23 @@ async fn run_camera_screenshot(
 ) -> Result<StreamPayload, ActionError> {
     let camera_index = state.camera.lock().await;
 
+    /*let (tx, rx) = tokio::sync::oneshot::channel();
+
+    rayon::spawn(move || {
+        // some potentially expensive work here, including serialization
+        let mut buf = Vec::with_capacity(16 * 4096);
+        loop {
+            // potentially expensive work here
+            // then write chunk of calculated data into buf
+
+            if buf.len() >= 16 * 4096 {
+                tx.send(std::mem::replace(&mut buf, Vec::with_capacity(16 * 4096)));
+            }
+        }
+
+        tx.send(buf);
+    });*/
+
     let mut camera = Camera::new(camera_index.clone(), format).map_err(|e| {
         camera_error(format!(
             "Error in creating a camera with index {camera_index}: {e}"
@@ -43,12 +62,23 @@ async fn run_camera_screenshot(
         ))
     })?;
 
-    // Retrieve a camera frame
+    // Discard at least 30 camera frame before sending the correct one.
+    for _ in 0..30 {
+        camera.frame().map_err(|e| {
+            camera_error(format!(
+                "Error in retrieving a frame for camera with index {camera_index}: {e}"
+            ))
+        })?;
+    }
+
+    // This also allows to focus in the lens.
     let frame = camera.frame().map_err(|e| {
         camera_error(format!(
             "Error in retrieving a frame for camera with index {camera_index}: {e}"
         ))
     })?;
+
+    info!("Capture camera screenshot of size {}", frame.buffer().len());
 
     // Stop camera stream.
     camera.stop_stream().map_err(|e| {
@@ -56,8 +86,6 @@ async fn run_camera_screenshot(
             "Error in stopping a stream for camera with index {camera_index}: {e}"
         ))
     })?;
-
-    info!("Capture camera screenshot of size {}", frame.buffer().len());
 
     // Decode the frame and save its content into an image buffer
     let decoded_frame = frame
@@ -71,26 +99,24 @@ async fn run_camera_screenshot(
         decoded_frame.len()
     );
 
-    // Convert the image buffer into a `png` image
-    let mut cursor = Cursor::new(Vec::new());
+    // Convert the image buffer into a `png` image, and returns a bytes buffer
+    let mut bytes: Vec<u8> = Vec::new();
     decoded_frame
-        .write_to(&mut cursor, ImageFormat::Png)
+        .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
         .map_err(|e| {
             camera_error(format!(
                 "Error in converting the image buffer into `png` for {camera_index}: {e}"
             ))
         })?;
 
-    let raw_data_len = cursor.get_ref().len();
+    info!("Image size {}", bytes.len());
 
-    info!("Image size {}", raw_data_len);
+    let headers = [(header::CONTENT_TYPE, "image/png")];
 
-    let headers = [
-        (header::CONTENT_TYPE, "image/png"),
-        (header::CONTENT_LENGTH, &format!("{}", raw_data_len)),
-    ];
-
-    Ok(StreamPayload::from_headers_reader(headers, cursor))
+    Ok(StreamPayload::from_headers_reader(
+        headers,
+        Cursor::new(bytes),
+    ))
 }
 
 pub(crate) async fn screenshot_random(
