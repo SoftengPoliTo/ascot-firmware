@@ -1,68 +1,113 @@
+use std::io::Cursor;
+
+// Ascot axum.
+use ascot_axum::actions::stream::StreamPayload;
+use ascot_axum::actions::ActionError;
+
+use ascot_axum::extract::State;
+use ascot_axum::header;
+
+use image::ImageFormat;
+
+use nokhwa::{
+    pixel_format::{RgbAFormat, RgbFormat},
+    utils::{RequestedFormat, RequestedFormatType},
+    Camera,
+};
+
 use tracing::info;
 
-/*fn camera_stream(
-    index: &str,
-    frame_format_type: &str,
-    frame_format_option: Option<&str>,
-    display_frame: bool,
-) {
-    // Camera index.
-    let index = CameraIndex::String(index.into());
+use crate::{thread_error, thread_with_error, InternalState};
 
-    // Camera frame format.
-    let requested_format = make_requested_format(frame_format_type, frame_format_option).unwrap();
+pub(crate) async fn show_cameras_info(
+    State(state): State<InternalState>,
+) -> Result<StreamPayload, ActionError> {
+    let current_index = state.camera.lock().await;
+    let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::None);
+    let index = current_index.clone();
 
-    /*if display_frame {
-        // Sender and receiver channels.
-        let (sender, receiver) = flume::unbounded();
-        let (sender, receiver) = (Arc::new(sender), Arc::new(receiver));
-        let sender_clone = sender.clone();
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<
+        Result<Vec<u8>, tokio::sync::mpsc::error::SendError<Vec<u8>>>,
+    >();
 
-        // Create a thread for sending the camera frame.
-        let mut camera = CallbackCamera::new(index, requested_format, move |buf| {
-            sender_clone.send(buf).expect("Error sending frame!!!!");
-        })
-        .unwrap();
+    tokio::spawn(async move {
+        let mut camera = Camera::new(index.clone(), format)
+            .map_err(|e| thread_with_error("Impossible to create camera", &index, e))
+            .unwrap();
 
-        // Retrieve camera info.
-        let camera_info = camera.info().clone();
-        // Retrieve camera format.
-        let format = camera.camera_format().unwrap();
+        // Open camera stream
+        camera
+            .open_stream()
+            .map_err(|e| thread_with_error("Impossible to open a stream on camera", &index, e))
+            .unwrap();
 
-        // Open camera stream.
-        camera.open_stream().unwrap();
-    } else {
-        // Define a thread which captures a frame
-        let mut cb = CallbackCamera::new(index, requested_format, |buf| {
-            info!("Captured frame of size {}", buf.buffer().len());
-        })
-        .unwrap();
+        loop {
+            // This also allows to focus in the lens.
+            let frame = camera
+                .frame()
+                .map_err(|e| {
+                    thread_with_error("Impossible to retrieve a frame for camera", &index, e)
+                })
+                .unwrap();
 
-        // Open a camera stream
-        cb.open_stream().unwrap();
-        // Run the stream endlessly
-        loop {}
-    }*/
-}*/
+            info!("Capture camera screenshot of size {}", frame.buffer().len());
 
-pub(crate) async fn show_cameras_info() {
-    info!("Start");
-    // this will go out of scope either when this function returns (which it never does)
-    // or hyper drops the future because the client closed the connection
-    let _guard = Guard;
+            // Decode the frame and save its content into an image buffer
+            let decoded_frame = frame
+                .decode_image::<RgbAFormat>()
+                .map_err(|e| {
+                    thread_with_error("Impossible to decode a frame for camera", &index, e)
+                })
+                .unwrap();
 
-    // Retrieves camera images.
-    let mut send_task = tokio::spawn(async move { loop {} });
+            info!(
+                "Decoded frame: {}x{} {}",
+                decoded_frame.width(),
+                decoded_frame.height(),
+                decoded_frame.len()
+            );
 
-    // Checks browser connection. This task waits forever.
-    let mut recv_task = tokio::spawn(async move { std::future::pending::<()>().await });
+            // Convert the image buffer into a `png` image, and returns a bytes buffer
+            let mut bytes = Vec::new();
+            decoded_frame
+                .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
+                .map_err(|e| {
+                    thread_with_error("Impossible to write a `png` image for camera", &index, e)
+                })
+                .unwrap();
 
-    // If any one of the tasks run to completion, we abort the other.
-    tokio::select! {
-        _ = &mut send_task => recv_task.abort(),
-        _ = &mut recv_task => send_task.abort(),
-    };
+            info!("Image size {}", bytes.len());
+
+            tx.send(Ok(bytes))
+                .map_err(|_| thread_error("Impossible to send a `png` image for camera", &index))
+                .unwrap();
+        }
+    });
+
+    let headers = [(header::CONTENT_TYPE, "image/png")];
+
+    Ok(StreamPayload::from_headers_stream(
+        headers,
+        tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
+    ))
 }
+
+/*info!("Start");
+// this will go out of scope either when this function returns (which it never does)
+// or hyper drops the future because the client closed the connection
+let _guard = Guard;
+
+// Retrieves camera images.
+let mut send_task = tokio::spawn(async move { loop {} });
+
+// Checks browser connection. This task waits forever.
+let mut recv_task = tokio::spawn(async move { std::future::pending::<()>().await });
+
+// If any one of the tasks run to completion, we abort the other.
+tokio::select! {
+    _ = &mut send_task => recv_task.abort(),
+    _ = &mut recv_task => send_task.abort(),
+};*/
 
 struct Guard;
 
