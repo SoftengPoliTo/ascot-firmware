@@ -92,7 +92,7 @@ async fn run_camera_screenshot(
         (header::CONTENT_LENGTH, &format!("{}", raw_data_len)),
     ];
 
-    Ok(StreamPayload::new(headers, raw_data))
+    Ok(StreamPayload::from_stream(headers, raw_data))
 }
 
 pub(crate) async fn screenshot_random(

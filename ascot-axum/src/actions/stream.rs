@@ -1,16 +1,18 @@
+use core::error::Error;
 use core::future::Future;
-
-use std::io::Cursor;
 
 use ascot_library::route::RouteHazards;
 
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     handler::Handler,
     http::header::HeaderName,
     response::{IntoResponse, Response},
 };
 
+use futures_core::TryStream;
+
+use tokio::io::AsyncRead;
 use tokio_util::io::ReaderStream;
 
 use super::{ActionError, DeviceAction, MandatoryAction};
@@ -19,11 +21,52 @@ use super::{ActionError, DeviceAction, MandatoryAction};
 pub struct StreamPayload(Response);
 
 impl StreamPayload {
-    /// Creates a new [`StreamPayload`].
-    pub fn new<const N: usize>(headers: [(HeaderName, &str); N], data: Vec<u8>) -> Self {
-        let stream = ReaderStream::new(Cursor::new(data));
-        let response = (headers, Body::from_stream(stream)).into_response();
-        Self(response)
+    /// Creates a new [`StreamPayload`] from headers and stream.
+    #[inline]
+    pub fn from_headers_and_stream<const N: usize, S>(
+        headers: [(HeaderName, &str); N],
+        stream: S,
+    ) -> Self
+    where
+        S: TryStream + Send + 'static,
+        S::Ok: Into<Bytes>,
+        S::Error: Into<Box<dyn Error + Sync + Send>>,
+    {
+        Self((headers, Body::from_stream(stream)).into_response())
+    }
+
+    /// Creates a new [`StreamPayload`] from a stream.
+    #[inline]
+    pub fn from_stream<S>(stream: S) -> Self
+    where
+        S: TryStream + Send + 'static,
+        S::Ok: Into<Bytes>,
+        S::Error: Into<Box<dyn Error + Sync + Send>>,
+    {
+        Self(Body::from_stream(stream).into_response())
+    }
+
+    /// Creates a new [`StreamPayload`] from headers and reader.
+    #[inline]
+    pub fn from_headers_and_reader<const N: usize, R>(
+        headers: [(HeaderName, &str); N],
+        reader: R,
+    ) -> Self
+    where
+        R: AsyncRead + Send + 'static,
+    {
+        let stream = ReaderStream::new(reader);
+        Self((headers, Body::from_stream(stream)).into_response())
+    }
+
+    /// Creates a new [`StreamPayload`] from a reader.
+    #[inline]
+    pub fn from_reader<R>(reader: R) -> Self
+    where
+        R: AsyncRead + Send + 'static,
+    {
+        let stream = ReaderStream::new(reader);
+        Self(Body::from_stream(stream).into_response())
     }
 }
 
