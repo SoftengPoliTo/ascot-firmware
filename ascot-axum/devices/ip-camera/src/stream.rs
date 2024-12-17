@@ -20,7 +20,7 @@ use tokio::task::spawn_blocking;
 
 use tracing::info;
 
-use crate::{thread_with_error, InternalState};
+use crate::InternalState;
 
 // To avoid busy resources we need a total time of 200ms.
 pub(crate) async fn show_camera_stream(
@@ -32,9 +32,15 @@ pub(crate) async fn show_camera_stream(
 
     let (tx, rx) = unbounded_channel::<Result<Vec<u8>, SendError<()>>>();
 
+    // TODO: The runtime is not able to correctly unwrap on ActionError as it is
+    // right now because ActionError is a Response type. Therefore, we just
+    // unwrap each function as it is to see the actual error.
+    // Errors must be handled by the main thread, therefore they must be
+    // sent through the rx stream as a SendError type, which, though, requires
+    // a specific kind of data.
     spawn_blocking(move || {
         let mut camera = Camera::new(index.clone(), format)
-            .map_err(|e| thread_with_error("Impossible to create camera", &index, e))
+            //.map_err(|e| thread_with_error("Impossible to create camera", &index, e))
             .unwrap();
 
         // If a request is sent with a high throttle, we should wait for
@@ -45,16 +51,16 @@ pub(crate) async fn show_camera_stream(
         // Open camera stream
         camera
             .open_stream()
-            .map_err(|e| thread_with_error("Impossible to open a stream on camera", &index, e))
+            //.map_err(|e| thread_with_error("Impossible to open a stream on camera", &index, e))
             .unwrap();
 
         while !tx.is_closed() {
             // This also allows to focus in the lens.
             let frame = camera
                 .frame()
-                .map_err(|e| {
+                /*.map_err(|e| {
                     thread_with_error("Impossible to retrieve a frame for camera", &index, e)
-                })
+                })*/
                 .unwrap();
 
             info!("Capture camera screenshot of size {}", frame.buffer().len());
@@ -62,9 +68,9 @@ pub(crate) async fn show_camera_stream(
             // Decode the frame and save its content into an image buffer
             let decoded_frame = frame
                 .decode_image::<RgbAFormat>()
-                .map_err(|e| {
+                /*.map_err(|e| {
                     thread_with_error("Impossible to decode a frame for camera", &index, e)
-                })
+                })*/
                 .unwrap();
 
             info!(
@@ -78,9 +84,9 @@ pub(crate) async fn show_camera_stream(
             let mut bytes = Vec::new();
             decoded_frame
                 .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
-                .map_err(|e| {
+                /*.map_err(|e| {
                     thread_with_error("Impossible to write a `png` image for camera", &index, e)
-                })
+                })*/
                 .unwrap();
 
             info!("Image size {}", bytes.len());
