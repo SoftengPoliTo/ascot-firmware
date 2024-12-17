@@ -103,7 +103,7 @@ struct Cli {
     domain: String,
 
     /// Service type.
-    #[arg(short = 't', long = "type", default_value = "General Fridge")]
+    #[arg(short = 't', long = "type", default_value = "General Device")]
     service_type: String,
 }
 

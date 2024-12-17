@@ -24,25 +24,24 @@ pub enum ErrorKind {
 impl ErrorKind {
     pub(crate) const fn description(self) -> &'static str {
         match self {
-            ErrorKind::Service => "service error",
-            ErrorKind::NotFoundAddress => "not found address",
-            ErrorKind::Serialization => "serialization",
-            ErrorKind::AscotLibrary => "Ascot library error",
-            ErrorKind::Light => "light error",
-            ErrorKind::Fridge => "fridge error",
-            ErrorKind::External => "external error",
+            ErrorKind::Service => "Service",
+            ErrorKind::NotFoundAddress => "Not Found Address",
+            ErrorKind::Serialization => "Serialization",
+            ErrorKind::AscotLibrary => "Ascot Library",
+            ErrorKind::Light => "Light",
+            ErrorKind::Fridge => "Fridge",
+            ErrorKind::External => "External",
         }
     }
 }
 
 impl core::fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.description().fmt(f)
+        write!(f, "Error kind: {}", self.description())
     }
 }
 
 /// Library error.
-#[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
     info: Cow<'static, str>,
@@ -50,7 +49,13 @@ pub struct Error {
 
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.error().fmt(f)
+        self.format(f)
+    }
+}
+
+impl core::fmt::Debug for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.format(f)
     }
 }
 
@@ -69,8 +74,9 @@ impl Error {
         Self::new(ErrorKind::External, info)
     }
 
-    pub(crate) fn error(&self) -> String {
-        format!("{}: {}", self.kind, self.info)
+    fn format(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "{}", self.kind)?;
+        write!(f, "Cause: {}", self.info)
     }
 }
 
