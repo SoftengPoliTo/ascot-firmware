@@ -37,14 +37,14 @@ impl ErrorKind {
 
 impl core::fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Error kind: {}", self.description())
+        write!(f, "{}", self.description())
     }
 }
 
 /// Library error.
 pub struct Error {
     kind: ErrorKind,
-    info: Cow<'static, str>,
+    description: Cow<'static, str>,
 }
 
 impl core::fmt::Display for Error {
@@ -60,23 +60,23 @@ impl core::fmt::Debug for Error {
 }
 
 impl Error {
-    /// Creates an [`Error`] passing a specific [`ErrorKind`] and a description.
-    pub fn new(kind: ErrorKind, info: impl Into<Cow<'static, str>>) -> Self {
+    /// Creates an [`Error`] from an [`ErrorKind`] and a description.
+    pub fn new(kind: ErrorKind, description: impl Into<Cow<'static, str>>) -> Self {
         Self {
             kind,
-            info: info.into(),
+            description: description.into(),
         }
     }
 
-    /// Creates an [`Error`] for [`ErrorKind::External`] passing a specific
+    /// Creates an [`Error`] for [`ErrorKind::External`] with a specific
     /// description.
-    pub fn external(info: impl Into<Cow<'static, str>>) -> Self {
-        Self::new(ErrorKind::External, info)
+    pub fn external(description: impl Into<Cow<'static, str>>) -> Self {
+        Self::new(ErrorKind::External, description)
     }
 
     fn format(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "{}", self.kind)?;
-        write!(f, "Cause: {}", self.info)
+        write!(f, "Cause: {}", self.description)
     }
 }
 

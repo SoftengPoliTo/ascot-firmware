@@ -42,8 +42,11 @@ fn startup_error(error: &str) -> Error {
     Error::external(format!("{error} at server startup"))
 }
 
-fn startup_with_error(description: &str, error: impl std::error::Error) -> Error {
-    Error::external(format!("{description} at server startup: {error}"))
+fn startup_with_error(description: &str, error: impl core::error::Error) -> Error {
+    Error::external(format!(
+        "{description} at server startup
+         Info: {error}"
+    ))
 }
 
 fn camera_index_error(
@@ -51,20 +54,33 @@ fn camera_index_error(
     camera_index: &CameraIndex,
     error: impl std::error::Error,
 ) -> ActionError {
-    ActionError::internal(&format!("{description} with index {camera_index}: {error}"))
+    ActionError::internal(&format!(
+        r#"
+            {description} with index {camera_index}
+            Info: {error}
+        "#
+    ))
 }
 
-fn camera_error(description: &str, error: impl std::error::Error) -> ActionError {
-    ActionError::internal(&format!("{description}: {error}"))
+fn camera_error(description: &str, error: impl core::error::Error) -> ActionError {
+    ActionError::internal(&format!(
+        r#"
+            {description}
+            Info: {error}
+        "#
+    ))
 }
 
 fn thread_with_error(
     description: &str,
     camera_index: &CameraIndex,
-    error: impl std::error::Error,
+    error: impl core::error::Error,
 ) -> ActionError {
     ActionError::internal(&format!(
-        "Camera thread -> {description} with index {camera_index}: {error}"
+        r#"
+            Camera thread -> {description} with index {camera_index}
+            Info: {error}
+        "#
     ))
 }
 
