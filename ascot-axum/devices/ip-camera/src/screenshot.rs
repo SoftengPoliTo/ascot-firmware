@@ -28,8 +28,8 @@ async fn run_camera_screenshot(
     state: InternalState,
     format: RequestedFormat<'static>,
 ) -> Result<StreamPayload, ActionError> {
-    let current_index = state.camera.lock().await;
-    let index = current_index.clone();
+    let camera = state.camera.lock().await;
+    let index = camera.index.clone();
 
     let join_handle = tokio::spawn(async move {
         let mut camera = Camera::new(index.clone(), format)
@@ -96,7 +96,7 @@ async fn run_camera_screenshot(
     let buf = join_handle.await.map_err(|e| {
         camera_index_error(
             "Impossible to retrieve the `png` image from thread for camera",
-            &current_index,
+            &camera.index,
             e,
         )
     })?;

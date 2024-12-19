@@ -9,7 +9,7 @@ use nokhwa::{
     query,
     utils::{
         frame_formats, ApiBackend, CameraIndex, CameraInfo, FrameFormat, RequestedFormat,
-        RequestedFormatType, Resolution,
+        Resolution,
     },
     Camera,
 };
@@ -62,11 +62,12 @@ pub(crate) struct FormatData {
 pub(crate) async fn show_camera_info(
     State(state): State<InternalState>,
 ) -> Result<SerialPayload<CameraDataResponse>, ActionError> {
-    let index = state.camera.lock().await;
+    let camera = state.camera.lock().await;
+    let index = &camera.index;
 
     let mut camera = Camera::new(
-        index.clone(),
-        RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
+        camera.index.clone(),
+        RequestedFormat::new::<RgbFormat>(camera.format_type),
     )
     .map_err(|e| camera_index_error("Impossible to create camera", &index, e))?;
 

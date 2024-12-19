@@ -11,37 +11,39 @@ use image::ImageFormat;
 
 use nokhwa::{
     pixel_format::{RgbAFormat, RgbFormat},
-    utils::{RequestedFormat, RequestedFormatType},
+    utils::RequestedFormat,
     Camera,
 };
 
-use tokio::sync::mpsc::{error::SendError, unbounded_channel};
+use tokio::sync::mpsc::unbounded_channel;
 use tokio::task::spawn_blocking;
 
-use tracing::info;
+use tracing::{error, info};
 
 use crate::InternalState;
+
+fn thread_error<T: std::fmt::Display>(msg: &str, e: T) {
+    error!(msg);
+    error!("{e}");
+}
 
 // To avoid busy resources we need a total time of 200ms.
 pub(crate) async fn show_camera_stream(
     State(state): State<InternalState>,
 ) -> Result<StreamPayload, ActionError> {
-    let current_index = state.camera.lock().await;
-    let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::None);
-    let index = current_index.clone();
+    let camera = state.camera.lock().await.clone();
+    let format = RequestedFormat::new::<RgbFormat>(camera.format_type);
 
-    let (tx, rx) = unbounded_channel::<Result<Vec<u8>, SendError<()>>>();
+    let (tx, rx) = unbounded_channel::<Result<Vec<u8>, &'static str>>();
 
-    // TODO: The runtime is not able to correctly unwrap on ActionError as it is
-    // right now because ActionError is a Response type. Therefore, we just
-    // unwrap each function as it is to see the actual error.
-    // Errors must be handled by the main thread, therefore they must be
-    // sent through the rx stream as a SendError type, which, though, requires
-    // a specific kind of data.
     spawn_blocking(move || {
-        let mut camera = Camera::new(index.clone(), format)
-            //.map_err(|e| thread_with_error("Impossible to create camera", &index, e))
-            .unwrap();
+        let mut camera = match Camera::new(camera.index, format) {
+            Ok(camera) => camera,
+            Err(e) => {
+                thread_error("Error in creating the camera.", e);
+                return;
+            }
+        };
 
         // If a request is sent with a high throttle, we should wait for
         // an amount of time to clean up old resources and
@@ -49,29 +51,35 @@ pub(crate) async fn show_camera_stream(
         std::thread::sleep(std::time::Duration::from_millis(300));
 
         // Open camera stream
-        camera
-            .open_stream()
-            //.map_err(|e| thread_with_error("Impossible to open a stream on camera", &index, e))
-            .unwrap();
+        camera.open_stream().unwrap();
 
         while !tx.is_closed() {
-            // This also allows to focus in the lens.
-            let frame = camera
-                .frame()
-                /*.map_err(|e| {
-                    thread_with_error("Impossible to retrieve a frame for camera", &index, e)
-                })*/
-                .unwrap();
+            // Retrieve a camera frame.
+            //
+            // If a frame cannot be retrieved, because the camera has been
+            // disconnected for example, return the thread. The stream will
+            // stop at the last frame.
+            let frame = match camera.frame() {
+                Ok(frame) => frame,
+                Err(e) => {
+                    thread_error("Error retrieving a camera frame.", e);
+                    return;
+                }
+            };
 
             info!("Capture camera screenshot of size {}", frame.buffer().len());
 
-            // Decode the frame and save its content into an image buffer
-            let decoded_frame = frame
-                .decode_image::<RgbAFormat>()
-                /*.map_err(|e| {
-                    thread_with_error("Impossible to decode a frame for camera", &index, e)
-                })*/
-                .unwrap();
+            // Decode the frame as RGBA format.
+            //
+            // If an error occurs, pass at the next loop cycle, discarding the
+            // frame.
+            let decoded_frame = match frame.decode_image::<RgbAFormat>() {
+                Ok(frame) => frame,
+                Err(e) => {
+                    thread_error("Error decoding a camera frame.", e);
+                    continue;
+                }
+            };
 
             info!(
                 "Decoded frame: {}x{} {}",
@@ -80,21 +88,26 @@ pub(crate) async fn show_camera_stream(
                 decoded_frame.len()
             );
 
-            // Convert the image buffer into a `png` image, and returns a bytes buffer
             let mut bytes = Vec::new();
-            decoded_frame
-                .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
-                /*.map_err(|e| {
-                    thread_with_error("Impossible to write a `png` image for camera", &index, e)
-                })*/
-                .unwrap();
 
-            info!("Image size {}", bytes.len());
+            // Convert the decoded frame into a `png` image and returns a
+            // bytes buffer.
+            //
+            // If an error occurs, pass at the next loop cycle, discarding the
+            // frame.
+            if let Err(e) = decoded_frame.write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png) {
+                thread_error("Error converting frame format into a `png` image", e);
+                continue;
+            }
 
-            // If we do not add this check, we could send a `png` image to a
+            info!("Image size {}", bytes.capacity());
+
+            // If we do not add this check, we could send data to a
             // non-existent channel.
             if !tx.is_closed() {
-                tx.send(Ok(bytes)).unwrap();
+                if let Err(e) = tx.send(Ok(bytes)) {
+                    error!("Error sending image {e}");
+                }
             }
         }
     });

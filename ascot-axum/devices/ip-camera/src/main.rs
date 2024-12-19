@@ -24,7 +24,10 @@ use async_lock::Mutex;
 use clap::Parser;
 
 // Nokhwa library
-use nokhwa::{native_api_backend, query, utils::CameraIndex};
+use nokhwa::{
+    native_api_backend, query,
+    utils::{CameraIndex, RequestedFormatType},
+};
 
 // Tracing library.
 use tracing::info;
@@ -85,12 +88,18 @@ fn thread_with_error(
 }
 
 #[derive(Clone)]
+struct CameraConfig {
+    index: CameraIndex,
+    format_type: RequestedFormatType,
+}
+
+#[derive(Clone)]
 struct InternalState {
-    camera: Arc<Mutex<CameraIndex>>,
+    camera: Arc<Mutex<CameraConfig>>,
 }
 
 impl InternalState {
-    fn new(camera: CameraIndex) -> Self {
+    fn new(camera: CameraConfig) -> Self {
         Self {
             camera: Arc::new(Mutex::new(camera)),
         }
@@ -156,6 +165,12 @@ async fn main() -> Result<(), Error> {
         .first()
         .ok_or(startup_error("No cameras found in the system"))?;
 
+    // Camera configuration.
+    let camera = CameraConfig {
+        index: first_camera.index().clone(),
+        format_type: RequestedFormatType::None,
+    };
+
     // Route to view all available cameras.
     let view_cameras_route =
         RouteHazards::no_hazards(Route::get("/view-all").description("View all system cameras."));
@@ -209,7 +224,7 @@ async fn main() -> Result<(), Error> {
     );
 
     // A camera device which is going to be run on the server.
-    let device = Device::with_state(InternalState::new(first_camera.index().clone()))
+    let device = Device::with_state(InternalState::new(camera))
         .main_route("/camera")
         .add_action(serial_stateless(view_cameras_route, show_available_cameras))
         .add_action(serial_stateful(camera_info_route, show_camera_info))
