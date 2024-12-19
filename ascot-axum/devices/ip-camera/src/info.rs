@@ -62,21 +62,24 @@ pub(crate) struct FormatData {
 pub(crate) async fn show_camera_info(
     State(state): State<InternalState>,
 ) -> Result<SerialPayload<CameraDataResponse>, ActionError> {
-    let camera = state.camera.lock().await;
-    let index = &camera.index;
+    let config = state.camera.lock().await;
 
     let mut camera = Camera::new(
-        camera.index.clone(),
-        RequestedFormat::new::<RgbFormat>(camera.format_type),
+        config.index.clone(),
+        RequestedFormat::new::<RgbFormat>(config.format_type),
     )
-    .map_err(|e| camera_index_error("Impossible to create camera", &index, e))?;
+    .map_err(|e| camera_index_error("Impossible to create camera", &config.index, e))?;
 
     // Get controls for a camera
-    let controls = camera
-        .camera_controls()
-        .map_err(|e| camera_index_error("Impossible to retrieve controls for camera", &index, e))?;
+    let controls = camera.camera_controls().map_err(|e| {
+        camera_index_error(
+            "Impossible to retrieve controls for camera",
+            &config.index,
+            e,
+        )
+    })?;
 
-    info!("Control for camera with index {index}");
+    info!("Control for camera with index {}", config.index);
 
     // Convert controls into strings.
     let controls = controls
@@ -123,7 +126,7 @@ pub(crate) async fn show_camera_info(
         .collect::<Vec<CameraFrameFormat>>();
 
     Ok(SerialPayload::new(CameraDataResponse {
-        camera_index: index.clone(),
+        camera_index: config.index.clone(),
         controls,
         frame_formats,
     }))

@@ -23,7 +23,7 @@ use tracing::{error, info};
 use crate::InternalState;
 
 fn thread_error<T: std::fmt::Display>(msg: &str, e: T) {
-    error!(msg);
+    error!("{msg}");
     error!("{e}");
 }
 
@@ -46,12 +46,14 @@ pub(crate) async fn show_camera_stream(
         };
 
         // If a request is sent with a high throttle, we should wait for
-        // an amount of time to clean up old resources and
-        // obtain the access to the camera.
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        // an amount of time to access to the camere because of delay.
+        std::thread::sleep(std::time::Duration::from_millis(200));
 
         // Open camera stream
-        camera.open_stream().unwrap();
+        if let Err(e) = camera.open_stream() {
+            thread_error("Error in opening a camera stream.", e);
+            return;
+        }
 
         while !tx.is_closed() {
             // Retrieve a camera frame.
