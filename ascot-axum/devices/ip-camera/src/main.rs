@@ -110,12 +110,16 @@ async fn change_camera(
 
     for camera in &cameras {
         if *camera.index() == index {
-            config.index = index;
+            config.index = index.clone();
             break;
         }
     }
 
-    let message = format!("Camera changed to index {}", config.index);
+    let message = if config.index != index {
+        format!("Camera changed to index {}", config.index)
+    } else {
+        format!("The given {index} does not exist")
+    };
     info!("{message}");
 
     Ok(SerialPayload::new(ChangeCameraResponse { message }))
