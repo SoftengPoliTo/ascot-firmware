@@ -9,11 +9,13 @@ use std::sync::Arc;
 use ascot_library::route::{Route, RouteHazards};
 
 // Ascot axum.
+use ascot_axum::actions::serial::SerialPayload;
 use ascot_axum::actions::serial::{serial_stateful, serial_stateless};
 use ascot_axum::actions::stream::stream_stateful;
 use ascot_axum::actions::ActionError;
 use ascot_axum::device::Device;
 use ascot_axum::error::Error;
+use ascot_axum::extract::{Path, State};
 use ascot_axum::server::AscotServer;
 use ascot_axum::service::ServiceConfig;
 
@@ -26,8 +28,10 @@ use clap::Parser;
 // Nokhwa library
 use nokhwa::{
     native_api_backend, query,
-    utils::{CameraIndex, RequestedFormatType},
+    utils::{ApiBackend, CameraIndex, RequestedFormatType},
 };
+
+use serde::Serialize;
 
 // Tracing library.
 use tracing::{error, info};
@@ -80,6 +84,41 @@ impl InternalState {
             camera: Arc::new(Mutex::new(camera)),
         }
     }
+}
+
+#[derive(Serialize)]
+struct ChangeCameraResponse {
+    message: String,
+}
+
+// Change camera.
+async fn change_camera(
+    State(state): State<InternalState>,
+    Path(index): Path<CameraIndex>,
+) -> Result<SerialPayload<ChangeCameraResponse>, ActionError> {
+    let mut config = state.camera.lock().await;
+
+    // Check whether the new index is equal to the previous one.
+    if config.index == index {
+        let message = format!("Camera index remained unchanged at {}", config.index);
+        info!("{message}");
+        return Ok(SerialPayload::new(ChangeCameraResponse { message }));
+    }
+
+    // Retrieve all cameras present on a system
+    let cameras = query(ApiBackend::Auto).map_err(|e| camera_error("No cameras found", e))?;
+
+    for camera in &cameras {
+        if *camera.index() == index {
+            config.index = index;
+            break;
+        }
+    }
+
+    let message = format!("Camera changed to index {}", config.index);
+    info!("{message}");
+
+    Ok(SerialPayload::new(ChangeCameraResponse { message }))
 }
 
 #[derive(Parser)]
@@ -156,8 +195,8 @@ async fn main() -> Result<(), Error> {
         RouteHazards::no_hazards(Route::get("/info").description("View current camera data."));
 
     // Route to change camera index.
-    let camera_index_route =
-        RouteHazards::no_hazards(Route::get("/change-camera").description("Change camera index."));
+    let change_camera_route =
+        RouteHazards::no_hazards(Route::get("/change-camera").description("Change camera."));
 
     // Route to change stream format.
     let stream_format_random_route = RouteHazards::no_hazards(
@@ -213,6 +252,7 @@ async fn main() -> Result<(), Error> {
         .main_route("/camera")
         .add_action(serial_stateless(view_cameras_route, show_available_cameras))
         .add_action(serial_stateful(camera_info_route, show_camera_info))
+        .add_action(serial_stateful(change_camera_route, change_camera))
         .add_action(stream_stateful(camera_stream_route, show_camera_stream))
         .add_action(stream_stateful(screenshot_random_route, screenshot_random))
         .add_action(stream_stateful(
