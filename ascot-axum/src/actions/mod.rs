@@ -6,6 +6,9 @@ pub mod info;
 pub mod ok;
 /// Action and response to manage data serialization.
 pub mod serial;
+/// Action and response to manage a stream of data expressed as a sequence
+/// of bytes.
+pub mod stream;
 
 use ascot_library::hazards::{Hazard, Hazards};
 use ascot_library::input::InputsData;
