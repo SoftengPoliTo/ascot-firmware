@@ -12,4 +12,6 @@ pub mod extract {
     pub use axum::extract::{FromRef, Json, Path, State};
 }
 
+pub use axum::http::header;
+
 mod services;

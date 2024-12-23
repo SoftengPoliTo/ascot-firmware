@@ -1,6 +1,7 @@
 pub mod empty;
 pub mod info;
 pub mod serial;
+pub mod stream;
 
 use ascot_library::actions::ActionErrorKind;
 use ascot_library::hazards::{Hazard, Hazards};

@@ -1,0 +1,126 @@
+// Ascot axum.
+use ascot_axum::actions::serial::SerialPayload;
+use ascot_axum::actions::ActionError;
+use ascot_axum::extract::State;
+
+// Nokhwa library
+use nokhwa::{
+    pixel_format::RgbFormat,
+    query,
+    utils::{
+        frame_formats, ApiBackend, CameraControl, CameraIndex, CameraInfo, FrameFormat,
+        RequestedFormat, Resolution,
+    },
+    Camera,
+};
+
+use serde::Serialize;
+
+use tracing::info;
+
+use crate::{camera_error, InternalState};
+
+#[derive(Serialize)]
+pub(crate) struct ViewCamerasResponse {
+    cameras: Vec<CameraInfo>,
+}
+
+// Not a computationally intensive route, just some matches.
+pub(crate) async fn show_available_cameras(
+) -> Result<SerialPayload<ViewCamerasResponse>, ActionError> {
+    // Retrieve all cameras present on a system
+    let cameras = query(ApiBackend::Auto).map_err(|e| camera_error("No cameras found", e))?;
+
+    info!("There are {} available cameras.", cameras.len());
+
+    for camera in &cameras {
+        info!("{camera}");
+    }
+
+    Ok(SerialPayload::new(ViewCamerasResponse { cameras }))
+}
+
+#[derive(Serialize)]
+pub(crate) struct CameraDataResponse {
+    camera_index: CameraIndex,
+    controls: Vec<CameraControl>,
+    frame_formats: Vec<CameraFrameFormat>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct CameraFrameFormat {
+    frame_format: FrameFormat,
+    format_data: Vec<FormatData>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct FormatData {
+    resolution: Resolution,
+    fps: String,
+}
+
+pub(crate) async fn show_camera_info(
+    State(state): State<InternalState>,
+) -> Result<SerialPayload<CameraDataResponse>, ActionError> {
+    let config = state.camera.lock().await;
+
+    let mut camera = Camera::new(
+        config.index.clone(),
+        RequestedFormat::new::<RgbFormat>(config.format_type),
+    )
+    .map_err(|e| camera_error("Impossible to create camera", e))?;
+
+    // Get controls for a camera
+    let controls = camera
+        .camera_controls()
+        .map_err(|e| camera_error("Impossible to retrieve controls for camera", e))?;
+
+    info!("Control for camera with index {}", config.index);
+
+    // Show controls
+    for control in &controls {
+        info!("{control}");
+    }
+
+    // Iterate over frame formats.
+    let frame_formats = frame_formats()
+        .iter()
+        .filter_map(|frame_format| {
+            // Among the frame formats, save the ones compatible with the camera
+            camera
+                .compatible_list_by_resolution(*frame_format)
+                .map(|compatible| {
+                    info!("{frame_format}:");
+
+                    let mut formats = compatible
+                        .into_iter()
+                        .collect::<Vec<(Resolution, Vec<u32>)>>();
+
+                    // Sort formats by name
+                    formats.sort_by(|a, b| a.0.cmp(&b.0));
+
+                    // Show sorted formats.
+                    let format_data = formats
+                        .into_iter()
+                        .map(|(resolution, fps)| {
+                            let fps = format!("{fps:?}");
+                            info!(" - {resolution}: {fps}");
+                            FormatData { resolution, fps }
+                        })
+                        .collect::<Vec<FormatData>>();
+
+                    CameraFrameFormat {
+                        frame_format: *frame_format,
+                        format_data,
+                    }
+                })
+                .ok()
+        })
+        .collect::<Vec<CameraFrameFormat>>();
+
+    Ok(SerialPayload::new(CameraDataResponse {
+        camera_index: config.index.clone(),
+        controls,
+        frame_formats,
+    }))
+}
