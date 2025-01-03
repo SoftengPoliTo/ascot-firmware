@@ -222,3 +222,81 @@ impl Input {
 
 /// A collection of [`Input`]s.
 pub type Inputs = Collection<Input>;
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::serialize;
+
+    use super::{Input, InputData};
+
+    #[test]
+    fn test_all_inputs() {
+        assert_eq!(
+            serialize(InputData::from(Input::bool("bool", true))),
+            json!({
+                "name": "bool",
+                "kind": "Bool",
+                "structure": {
+                    "Bool": {
+                        "default": true
+                    }
+                }
+            })
+        );
+
+        assert_eq!(
+            serialize(InputData::from(Input::u8("u8", 0))),
+            json!({
+                "name": "u8",
+                "kind": "U8",
+                "structure": {
+                    "U8": {
+                        "default": 0
+                    }
+                }
+            })
+        );
+
+        assert_eq!(
+            serialize(InputData::from(Input::rangeu64_with_default(
+                "rangeu64",
+                (0, 20, 1),
+                5
+            ))),
+            json!({
+                "name": "rangeu64",
+                "kind": "RangeU64",
+                "structure": {
+                    "RangeU64": {
+                        "min": 0,
+                        "max": 20,
+                        "step": 1,
+                        "default": 5,
+                    }
+                }
+            })
+        );
+
+        assert_eq!(
+            serialize(InputData::from(Input::rangef64_with_default(
+                "rangef64",
+                (0., 20., 0.1),
+                5.
+            ))),
+            json!({
+                "name": "rangef64",
+                "kind": "RangeF64",
+                "structure": {
+                    "RangeF64": {
+                        "min": 0.,
+                        "max": 20.,
+                        "step": 0.1,
+                        "default": 5.,
+                    }
+                }
+            })
+        );
+    }
+}
