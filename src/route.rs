@@ -453,7 +453,6 @@ mod tests {
             "inputs": [
                 {
                     "name": "rangeu64",
-                    "kind": "RangeU64",
                     "structure": {
                         "RangeU64": {
                             "min": 0,
@@ -465,7 +464,6 @@ mod tests {
                 },
                 {
                     "name": "rangef64",
-                    "kind": "RangeF64",
                     "structure": {
                         "RangeF64": {
                             "min": 0.0,

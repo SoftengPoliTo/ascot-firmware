@@ -2,19 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::collections::Collection;
 
-/// All supported [`Input`] kinds.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum InputKind {
-    /// A [`bool`].
-    Bool,
-    /// A [`u8`].
-    U8,
-    /// A [`u64`] range.
-    RangeU64,
-    /// A [`f64`] range.
-    RangeF64,
-}
-
 /// The structure of an [`InputKind`].
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum InputStructure {
@@ -49,9 +36,6 @@ mod input_data {
     pub struct InputData {
         /// Name.
         pub name: alloc::borrow::Cow<'static, str>,
-        /// Input kind.
-        #[serde(rename = "kind")]
-        pub kind: InputKind,
         /// Input structure.
         #[serde(rename = "structure")]
         pub structure: InputStructure,
@@ -61,7 +45,6 @@ mod input_data {
         pub(super) fn new(input: Input) -> Self {
             Self {
                 name: input.name.into(),
-                kind: input.kind,
                 structure: input.structure,
             }
         }
@@ -80,9 +63,6 @@ mod input_data {
     pub struct InputData {
         /// Name.
         pub name: &'static str,
-        /// Input kind.
-        #[serde(rename = "kind")]
-        pub kind: InputKind,
         /// Input structure.
         #[serde(rename = "structure")]
         pub structure: InputStructure,
@@ -92,7 +72,6 @@ mod input_data {
         pub(super) fn new(input: Input) -> Self {
             Self {
                 name: input.name,
-                kind: input.kind,
                 structure: input.structure,
             }
         }
@@ -130,8 +109,6 @@ pub use input_data::InputsData;
 pub struct Input {
     // Name.
     pub(crate) name: &'static str,
-    // Input kind.
-    kind: InputKind,
     // Input structure.
     structure: InputStructure,
 }
@@ -157,7 +134,6 @@ impl Input {
     pub fn bool(name: &'static str, default: bool) -> Self {
         Self {
             name,
-            kind: InputKind::Bool,
             structure: InputStructure::Bool { default },
         }
     }
@@ -168,7 +144,6 @@ impl Input {
     pub fn u8(name: &'static str, default: u8) -> Self {
         Self {
             name,
-            kind: InputKind::U8,
             structure: InputStructure::U8 { default },
         }
     }
@@ -186,7 +161,6 @@ impl Input {
     pub fn rangeu64_with_default(name: &'static str, range: (u64, u64, u64), default: u64) -> Self {
         Self {
             name,
-            kind: InputKind::RangeU64,
             structure: InputStructure::RangeU64 {
                 min: range.0,
                 max: range.1,
@@ -209,7 +183,6 @@ impl Input {
     pub fn rangef64_with_default(name: &'static str, range: (f64, f64, f64), default: f64) -> Self {
         Self {
             name,
-            kind: InputKind::RangeF64,
             structure: InputStructure::RangeF64 {
                 min: range.0,
                 max: range.1,
@@ -237,7 +210,6 @@ mod tests {
             serialize(InputData::from(Input::bool("bool", true))),
             json!({
                 "name": "bool",
-                "kind": "Bool",
                 "structure": {
                     "Bool": {
                         "default": true
@@ -250,7 +222,6 @@ mod tests {
             serialize(InputData::from(Input::u8("u8", 0))),
             json!({
                 "name": "u8",
-                "kind": "U8",
                 "structure": {
                     "U8": {
                         "default": 0
@@ -267,7 +238,6 @@ mod tests {
             ))),
             json!({
                 "name": "rangeu64",
-                "kind": "RangeU64",
                 "structure": {
                     "RangeU64": {
                         "min": 0,
@@ -287,7 +257,6 @@ mod tests {
             ))),
             json!({
                 "name": "rangef64",
-                "kind": "RangeF64",
                 "structure": {
                     "RangeF64": {
                         "min": 0.,
