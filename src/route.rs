@@ -320,3 +320,187 @@ impl Route {
 
 /// A collection of [`Route`]s.
 pub type Routes = Collection<Route>;
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::serialize;
+
+    use super::{Hazard, Hazards, Input, Route};
+
+    #[test]
+    fn test_all_routes() {
+        assert_eq!(
+            serialize(
+                Route::get("/route")
+                    .description("A GET route")
+                    .serialize_data()
+            ),
+            json!({
+                "name": "/route",
+                "description": "A GET route",
+                "REST kind": "Get"
+            })
+        );
+
+        assert_eq!(
+            serialize(
+                Route::put("/route")
+                    .description("A PUT route")
+                    .serialize_data()
+            ),
+            json!({
+                "name": "/route",
+                "description": "A PUT route",
+                "REST kind": "Put"
+            })
+        );
+
+        assert_eq!(
+            serialize(
+                Route::post("/route")
+                    .description("A POST route")
+                    .serialize_data()
+            ),
+            json!({
+                "name": "/route",
+                "description": "A POST route",
+                "REST kind": "Post"
+            })
+        );
+
+        assert_eq!(
+            serialize(
+                Route::delete("/route")
+                    .description("A DELETE route")
+                    .serialize_data()
+            ),
+            json!({
+                "name": "/route",
+                "description": "A DELETE route",
+                "REST kind": "Delete"
+            })
+        );
+    }
+
+    #[test]
+    fn test_all_hazards() {
+        assert_eq!(
+            serialize(
+                Route::get("/route")
+                    .description("A GET route")
+                    .with_single_hazard(Hazard::FireHazard)
+                    .serialize_data()
+            ),
+            json!({
+                "name": "/route",
+                "description": "A GET route",
+                "REST kind": "Get",
+                "hazards": [
+                    "FireHazard"
+                ],
+            })
+        );
+
+        let mut hazards = Hazards::empty();
+        hazards.add(Hazard::FireHazard);
+        hazards.add(Hazard::AirPoisoning);
+
+        assert_eq!(
+            serialize(
+                Route::get("/route")
+                    .description("A GET route")
+                    .with_hazards(hazards)
+                    .serialize_data()
+            ),
+            json!({
+                "name": "/route",
+                "description": "A GET route",
+                "REST kind": "Get",
+                "hazards": [
+                    "FireHazard",
+                    "AirPoisoning",
+                ],
+            })
+        );
+
+        assert_eq!(
+            serialize(
+                Route::get("/route")
+                    .description("A GET route")
+                    .with_slice_hazards(&[Hazard::FireHazard, Hazard::AirPoisoning])
+                    .serialize_data()
+            ),
+            json!({
+                "name": "/route",
+                "description": "A GET route",
+                "REST kind": "Get",
+                "hazards": [
+                    "FireHazard",
+                    "AirPoisoning",
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn test_all_inputs() {
+        let expected = json!({
+            "name": "/route",
+            "description": "A GET route",
+            "REST kind": "Get",
+            "inputs": [
+                {
+                    "name": "rangeu64",
+                    "kind": "RangeU64",
+                    "structure": {
+                        "RangeU64": {
+                            "min": 0,
+                            "max": 20,
+                            "step": 1,
+                            "default": 5
+                        }
+                    }
+                },
+                {
+                    "name": "rangef64",
+                    "kind": "RangeF64",
+                    "structure": {
+                        "RangeF64": {
+                            "min": 0.0,
+                            "max": 20.0,
+                            "step": 0.1,
+                            "default": 0.0
+                        }
+                    }
+                }
+            ],
+            "REST kind": "Get"
+        });
+
+        assert_eq!(
+            serialize(
+                Route::get("/route")
+                    .description("A GET route")
+                    .input(Input::rangeu64_with_default("rangeu64", (0, 20, 1), 5))
+                    .input(Input::rangef64("rangef64", (0., 20., 0.1)))
+                    .serialize_data()
+            ),
+            expected
+        );
+
+        assert_eq!(
+            serialize(
+                Route::get("/route")
+                    .description("A GET route")
+                    .inputs([
+                        Input::rangeu64_with_default("rangeu64", (0, 20, 1), 5),
+                        Input::rangef64("rangef64", (0., 20., 0.1))
+                    ])
+                    .serialize_data()
+            ),
+            expected
+        );
+    }
+}
