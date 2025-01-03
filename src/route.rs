@@ -225,6 +225,12 @@ impl Route {
         Self::init(RestKind::Post, route)
     }
 
+    /// Creates a new [`Route`] through a REST `DELETE` API.
+    #[must_use]
+    pub const fn delete(route: &'static str) -> Self {
+        Self::init(RestKind::Delete, route)
+    }
+
     /// Sets the route description.
     #[must_use]
     pub const fn description(mut self, description: &'static str) -> Self {
