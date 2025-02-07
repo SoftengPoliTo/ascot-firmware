@@ -1,10 +1,18 @@
-//! The communication interface among a device and a controller.
+//! The communication interface between a stack-oriented device and a more
+//! general-purpose device which acts as controller.
+//!
+//! This interface is thought to be used **only** on the stack-oriented device
+//! side because not all structures cannot be deserialized.
+//! However, it guarantees a correct data serialization for information sent to
+//! a controller.
+//!
+//! For a heap-oriented device, the main `ascot` crate is more suitable.
 //!
 //! This crate contains a series of APIs to:
 //!
-//! - Encode and decode the file containing the description of a device and
-//!   all of its routes. A route is expressed as an address which a controller
-//!   can invoke to execute an action on a device.
+//! - Encode and decode the description file containing a device structure and
+//!   all of its routes. A route is expressed as an address which can be invoked
+//!   by a controller to execute an action on a device.
 //! - Manage the hazards which might occur on a device when a determined route
 //!   is being invoked. Hazards can also be employed to manage the events
 //!   happening on a device.
@@ -17,37 +25,35 @@
 //! a controller. Each of these structures must be both serializable and
 //! deserializable. A device fills in these structures, while a controller
 //! consumes them.
-//!
-//! This crate can be used both on `std` and `no_std` environments. Indeed, the
-//! `std` features is enabled by default.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 #![no_std]
 
-#[cfg(feature = "alloc")]
-extern crate alloc;
-
 /// All methods to interact with an action.
-pub mod actions;
-/// All data collections.
-#[cfg(feature = "alloc")]
-pub mod collections;
+pub mod actions {
+    pub use ascot_library::actions::ActionError;
+}
 /// Description of a device with its routes information.
 pub mod device;
 /// Information about the economy device aspects.
 pub mod economy;
 /// Information about the energy device aspects.
 pub mod energy;
+/// Error handling.
+pub mod error;
 /// Hazards descriptions and methods.
 pub mod hazards;
 /// Route input parameters.
-#[cfg(feature = "alloc")]
 pub mod parameters;
 /// All supported responses returned by a device action.
 pub mod response;
 /// Definition of device routes.
 pub mod route;
+
+// All fixed-capacity structures and collections.
+mod utils;
+pub use utils::{collections, string};
 
 #[cfg(test)]
 pub(crate) fn serialize<T: serde::Serialize>(value: T) -> serde_json::Value {

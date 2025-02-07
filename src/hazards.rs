@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::collections::OutputSet;
-
 /// All [`Hazard`]s.
 pub const ALL_HAZARDS: &[Hazard] = &[
     Hazard::AirPoisoning,
@@ -288,7 +286,8 @@ impl Hazard {
 }
 
 /// A collection of [`Hazard`]s.
-pub type Hazards = OutputSet<Hazard>;
+#[cfg(feature = "alloc")]
+pub type Hazards = crate::collections::OutputSet<Hazard>;
 
 /// All [`Hazard`] data.
 #[derive(Debug, PartialEq, Clone, Copy, Serialize)]

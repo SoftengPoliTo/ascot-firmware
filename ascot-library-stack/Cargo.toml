@@ -1,28 +1,28 @@
 [package]
-name = "ascot-library"
+name = "ascot-library-stack"
 version = "0.1.0"
 authors = ["Michele Valsesia <luni-4@hotmail.it>"]
 edition = "2021"
-description = "Ascot communication interface for general-purpose devices."
+description = "Ascot communication interface for stack-oriented devices."
 license = "MIT"
 resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-indexmap.version = "2.7"
-indexmap.default-features = false
-indexmap.optional = true
+ascot-library.version = "0.1.0"
+ascot-library.path = ".."
+ascot-library.default-features = false
+
+heapless.version = "0.8.0"
+heapless.default-features = false
+heapless.features = ["serde"]
 
 serde.version = "1.0"
 serde.default-features = false
 serde.features = ["derive"]
 
+[dev-dependencies]
 serde_json.version = "1"
 serde_json.default-features = false
 serde_json.features = ["alloc"]
-
-[features]
-# Preserve_order feature is mandatory and necessary for indexmap.
-alloc = ["indexmap/serde", "serde_json/preserve_order"]
-default = ["alloc"]
